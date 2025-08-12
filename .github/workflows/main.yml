@@ -1,0 +1,34 @@
+name: Unzip Workflow
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '**/*.zip' # Triggers the workflow when a .zip file is pushed
+permissions:
+  contents: write
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Find and Unzip file
+        run: |
+          ZIP_FILE=$(find . -name "*.zip" -print -quit) # Finds the first zip file
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Unzipping $ZIP_FILE"
+            7z x "$ZIP_FILE" -o. -aoa # Extracts the zip file to a directory named after the archive, {Link: according to Stack Overflow https://stackoverflow.com/questions/66149984/github-action-step-to-extract-zip-file}
+            rm "$ZIP_FILE" # Remove the zip file after extraction
+          else
+            echo "No zip file found."
+          fi
+
+      - name: Commit Unzipped Files (Optional)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Unzipped files" || true # `|| true` is used to prevent the action from failing if there are no changes to commit
+          git push
