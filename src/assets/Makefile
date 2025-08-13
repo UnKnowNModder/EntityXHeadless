@@ -443,6 +443,22 @@ SCRIPT_TARGETS_PY_PUBLIC = \
   $(BUILD_DIR)/ba_data/python/bauiv1lib/url.py \
   $(BUILD_DIR)/ba_data/python/bauiv1lib/v2upgrade.py \
   $(BUILD_DIR)/ba_data/python/bauiv1lib/watch.py \
+  $(BUILD_DIR)/ba_data/python/bacore/__init__.py \
+  $(BUILD_DIR)/ba_data/python/bacore/_clients.py \
+  $(BUILD_DIR)/ba_data/python/bacore/_config.py \
+  $(BUILD_DIR)/ba_data/python/bacore/_enums.py \
+  $(BUILD_DIR)/ba_data/python/bacore/_roles.py \
+  $(BUILD_DIR)/ba_data/python/bacore/_storage.py \
+  $(BUILD_DIR)/ba_data/python/bacore/_tournament.py \
+  $(BUILD_DIR)/ba_data/python/bacore/_utils.py \
+  $(BUILD_DIR)/ba_data/python/commands/__init__.py \
+  $(BUILD_DIR)/ba_data/python/commands/cheats.py \
+  $(BUILD_DIR)/ba_data/python/commands/management.py \
+  $(BUILD_DIR)/ba_data/python/commands/regulars.py \
+  $(BUILD_DIR)/ba_data/python/utilities/__init__.py \
+  $(BUILD_DIR)/ba_data/python/utilities/character_chooser.py \
+  $(BUILD_DIR)/ba_data/python/utilities/protector.py \
+  $(BUILD_DIR)/ba_data/python/utilities/tournament.py \
   $(BUILD_DIR)/server_package/ballisticakit_server.py
 
 SCRIPT_TARGETS_SO_PUBLIC = \
