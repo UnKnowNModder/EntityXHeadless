@@ -193,6 +193,7 @@ ctx.filter_file_names = {
     'flycheck-dir-locals.el',
     '.projectile',
     '.editorconfig',
+    'action.yml',
     'ci.yml',
     'cd.yml',
     'deploy_docs.yml',
@@ -289,6 +290,7 @@ ctx.filter_file_extensions = {
     '.xcstrings',
     '.filters',
     '.rst_t',
+    '.ps1',
 }
 
 # ELSE files with these extensions will NOT be filtered.

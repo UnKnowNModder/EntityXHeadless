@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "ballistica/core/mgen/python_modules_monolithic.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/shared/ballistica.h"
 #include "ballistica/shared/foundation/macros.h"
 #include "ballistica/shared/python/python.h"
@@ -288,6 +288,8 @@ void CorePython::EnablePythonLoggingCalls() {
   assert(objs().Exists(ObjID::kLoggerRootLogCall));
   assert(objs().Exists(ObjID::kLoggerBa));
   assert(objs().Exists(ObjID::kLoggerBaLogCall));
+  assert(objs().Exists(ObjID::kLoggerBaAccount));
+  assert(objs().Exists(ObjID::kLoggerBaAccountLogCall));
   assert(objs().Exists(ObjID::kLoggerBaApp));
   assert(objs().Exists(ObjID::kLoggerBaAppLogCall));
   assert(objs().Exists(ObjID::kLoggerBaAudio));
@@ -302,6 +304,8 @@ void CorePython::EnablePythonLoggingCalls() {
   assert(objs().Exists(ObjID::kLoggerBaAssetsLogCall));
   assert(objs().Exists(ObjID::kLoggerBaInput));
   assert(objs().Exists(ObjID::kLoggerBaInputLogCall));
+  assert(objs().Exists(ObjID::kLoggerBaUI));
+  assert(objs().Exists(ObjID::kLoggerBaUILogCall));
   assert(objs().Exists(ObjID::kLoggerBaNetworking));
   assert(objs().Exists(ObjID::kLoggerBaNetworkingLogCall));
 
@@ -311,7 +315,7 @@ void CorePython::EnablePythonLoggingCalls() {
     python_logging_calls_enabled_ = true;
     for (auto&& entry : early_logs_) {
       LoggingCall(std::get<0>(entry), std::get<1>(entry),
-                  "[HELD] " + std::get<2>(entry));
+                  ("[HELD] " + std::get<2>(entry)).c_str());
     }
     early_logs_.clear();
   }
@@ -333,6 +337,10 @@ void CorePython::ImportPythonObjs() {
     }
     objs_.StoreCallable(ObjID::kPrependSysPathCall,
                         *ctx.DictGetItem("prepend_sys_path"));
+    objs_.StoreCallable(ObjID::kWarmStart1Call,
+                        *ctx.DictGetItem("warm_start_1"));
+    objs_.StoreCallable(ObjID::kWarmStart1CompletedCall,
+                        *ctx.DictGetItem("warm_start_1_completed"));
     objs_.StoreCallable(ObjID::kBaEnvConfigureCall,
                         *ctx.DictGetItem("import_baenv_and_run_configure"));
     objs_.StoreCallable(ObjID::kBaEnvGetConfigCall,
@@ -367,6 +375,7 @@ void CorePython::UpdateInternalLoggerLevels(LogLevel* log_levels) {
       {LogName::kRoot, ObjID::kLoggerRoot},
       {LogName::kBa, ObjID::kLoggerBa},
       {LogName::kBaApp, ObjID::kLoggerBaApp},
+      {LogName::kBaAccount, ObjID::kLoggerBaAccount},
       {LogName::kBaAudio, ObjID::kLoggerBaAudio},
       {LogName::kBaGraphics, ObjID::kLoggerBaGraphics},
       {LogName::kBaPerformance, ObjID::kLoggerBaPerformance},
@@ -374,6 +383,7 @@ void CorePython::UpdateInternalLoggerLevels(LogLevel* log_levels) {
       {LogName::kBaLifecycle, ObjID::kLoggerBaLifecycle},
       {LogName::kBaAssets, ObjID::kLoggerBaAssets},
       {LogName::kBaInput, ObjID::kLoggerBaInput},
+      {LogName::kBaUI, ObjID::kLoggerBaUI},
       {LogName::kBaNetworking, ObjID::kLoggerBaNetworking},
   };
 
@@ -428,6 +438,19 @@ void CorePython::SoftImportBase() {
   }
 }
 
+void CorePython::WarmStart1() {
+  auto result = objs().Get(ObjID::kWarmStart1Call).Call();
+  assert(result.exists());
+}
+
+auto CorePython::WarmStart1Completed() -> bool {
+  auto result = objs().Get(ObjID::kWarmStart1CompletedCall).Call();
+  assert(result.exists());
+  auto* result_obj{result.get()};
+  assert(result_obj == Py_True || result_obj || Py_False);
+  return result_obj == Py_True;
+}
+
 void CorePython::VerifyPythonEnvironment() {
   // Make sure we're running the Python version we require.
   const char* ver = Py_GetVersion();
@@ -436,7 +459,7 @@ void CorePython::VerifyPythonEnvironment() {
   }
 }
 
-void CorePython::MonolithicModeBaEnvConfigure() {
+void CorePython::MonolithicModeBaEnvImport() {
   assert(g_buildconfig.monolithic_build());
   assert(g_core);
   g_core->logging->Log(LogName::kBaLifecycle, LogLevel::kInfo,
@@ -460,7 +483,9 @@ void CorePython::MonolithicModeBaEnvConfigure() {
 
   auto args = PythonRef::Stolen(Py_BuildValue("(s)", default_py_dir.c_str()));
   objs().Get(ObjID::kPrependSysPathCall).Call(args);
+}
 
+void CorePython::MonolithicModeBaEnvConfigure() {
   // Import and run baenv.configure() using our 'monolithic' default values
   // for all paths.
   std::optional<std::string> config_dir =
@@ -513,7 +538,7 @@ void CorePython::MonolithicModeBaEnvConfigure() {
 }
 
 void CorePython::LoggingCall(LogName logname, LogLevel loglevel,
-                             const std::string& msg) {
+                             const char* msg) {
   // If we're not yet sending logs to Python, store this one away until we
   // are.
   if (!python_logging_calls_enabled_) {
@@ -535,7 +560,7 @@ void CorePython::LoggingCall(LogName logname, LogLevel loglevel,
         g_core->platform->EmitPlatformLog("root", LogLevel::kError, errmsg);
         g_core->platform->EmitPlatformLog("root", loglevel, msg);
       }
-      fprintf(stderr, "%s\n%s\n", errmsg, msg.c_str());
+      fprintf(stderr, "%s\n%s\n", errmsg, msg);
     }
     return;
   }
@@ -552,6 +577,10 @@ void CorePython::LoggingCall(LogName logname, LogLevel loglevel,
       break;
     case LogName::kBa:
       logcallobj = ObjID::kLoggerBaLogCall;
+      handled = true;
+      break;
+    case LogName::kBaAccount:
+      logcallobj = ObjID::kLoggerBaAccountLogCall;
       handled = true;
       break;
     case LogName::kBaApp:
@@ -590,6 +619,10 @@ void CorePython::LoggingCall(LogName logname, LogLevel loglevel,
       logcallobj = ObjID::kLoggerBaLifecycleLogCall;
       handled = true;
       break;
+    case LogName::kBaUI:
+      logcallobj = ObjID::kLoggerBaUILogCall;
+      handled = true;
+      break;
     case LogName::kLast:
       logcallobj = ObjID::kLoggerRootLogCall;
       break;
@@ -623,18 +656,17 @@ void CorePython::LoggingCall(LogName logname, LogLevel loglevel,
       fprintf(stderr, "Unexpected LogLevel %d\n", static_cast<int>(loglevel));
       break;
   }
-  PythonRef args(
-      Py_BuildValue("(Os)", objs().Get(loglevelobjid).get(), msg.c_str()),
-      PythonRef::kSteal);
+  PythonRef args(Py_BuildValue("(Os)", objs().Get(loglevelobjid).get(), msg),
+                 PythonRef::kSteal);
   objs().Get(logcallobj).Call(args);
 }
 
 auto CorePython::WasModularMainCalled() -> bool {
   assert(!g_buildconfig.monolithic_build());
 
-  // This gets called in modular builds before anything is inited, so we need
-  // to avoid using anything from g_core or whatnot here; only raw Python
-  // stuff.
+  // This gets called in modular builds before anything is inited, so we
+  // need to avoid using anything from g_core or whatnot here; only raw
+  // Python stuff.
 
   PyObject* baenv = PyImport_ImportModule("baenv");
   if (!baenv) {
@@ -671,9 +703,9 @@ auto CorePython::WasModularMainCalled() -> bool {
 
 auto CorePython::FetchPythonArgs(std::vector<std::string>* buffer)
     -> std::vector<char*> {
-  // This gets called in modular builds before anything is inited, so we need
-  // to avoid using anything from g_core or whatnot here; only raw Python
-  // stuff.
+  // This gets called in modular builds before anything is inited, so we
+  // need to avoid using anything from g_core or whatnot here; only raw
+  // Python stuff.
 
   assert(buffer && buffer->empty());
   PyObject* sys = PyImport_ImportModule("sys");

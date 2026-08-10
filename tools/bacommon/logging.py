@@ -41,13 +41,14 @@ class ClientLoggerName(Enum):
     ACCOUNT_CLIENT_V2 = 'ba.accountclientv2'
     ACCOUNT = 'ba.account'
     LOGIN_ADAPTER = 'ba.loginadapter'
+    UI = 'ba.ui'
 
     @property
     def description(self) -> str:
         """Return a short description for the logger."""
         # pylint: disable=too-many-return-statements
         # pylint: disable=too-many-branches
-        cls = type(self)
+        cls = ClientLoggerName
         if self is cls.BA:
             return 'top level Ballistica logger - use to adjust everything'
         if self is cls.ENV:
@@ -86,6 +87,8 @@ class ClientLoggerName(Enum):
             return 'account functionality'
         if self is cls.LOGIN_ADAPTER:
             return 'support for particular login types'
+        if self is cls.UI:
+            return 'anything user-interface related'
         assert_never(self)
 
 

@@ -123,7 +123,7 @@ auto PythonClassMaterial::tp_new(PyTypeObject* type, PyObject* args,
     if (name_obj != Py_None) {
       name = Python::GetString(name_obj);
     } else {
-      name = Python::GetPythonFileLocation();
+      name = Python::PythonFileLocation();
     }
 
     if (HostActivity* host_activity =
@@ -169,9 +169,9 @@ void PythonClassMaterial::tp_dealloc(PythonClassMaterial* self) {
 
 auto PythonClassMaterial::tp_repr(PythonClassMaterial* self) -> PyObject* {
   BA_PYTHON_TRY;
-  return Py_BuildValue(
-      "s",
-      std::string("<ba.Material at " + Utils::PtrToString(self) + ">").c_str());
+  return Py_BuildValue("s", std::string("<bascenev1.Material at "
+                                        + Utils::PtrToString(self) + ">")
+                                .c_str());
   BA_PYTHON_CATCH;
 }
 

@@ -1,6 +1,7 @@
 # Released under the MIT License. See LICENSE for details.
 #
 """Logging functionality."""
+
 from __future__ import annotations
 
 import sys
@@ -16,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, override
 from threading import Thread, current_thread, Lock
 
-from efro.util import utc_now
+from efro.util import utc_now, strip_exception_tracebacks
 from efro.terminal import Clr, color_enabled
 from efro.dataclassio import ioprepped, IOAttrs, dataclass_to_json
 
@@ -73,7 +74,7 @@ LEVELNO_COLOR_CODES: dict[int, tuple[str, str]] = {
     logging.INFO: ('', ''),
     logging.WARNING: (Clr.YLW, Clr.RST),
     logging.ERROR: (Clr.RED, Clr.RST),
-    logging.CRITICAL: (Clr.SMAG + Clr.BLD + Clr.BLK, Clr.RST),
+    logging.CRITICAL: (Clr.SMAG + Clr.BLD + Clr.BBLK, Clr.RST),
 }
 
 
@@ -213,6 +214,9 @@ class LogHandler(logging.Handler):
     def _log_thread_main(self) -> None:
         self._event_loop = asyncio.new_event_loop()
 
+        # Try to avoid reference loops from exception tracebacks.
+        self._event_loop.set_exception_handler(_asyncio_exception_handler)
+
         # In our background thread event loop we do a fair amount of
         # slow synchronous stuff such as mucking with the log cache.
         # Let's avoid getting tons of warnings about this in debug mode
@@ -319,8 +323,6 @@ class LogHandler(logging.Handler):
 
     @override
     def emit(self, record: logging.LogRecord) -> None:
-        # pylint: disable=too-many-branches
-        # pylint: disable=too-many-locals
 
         if __debug__:
             starttime = time.monotonic()
@@ -786,3 +788,15 @@ def setup_logging(
         sys.stderr = FileLogEcho(sys.stderr, 'stderr', loghandler)
 
     return loghandler
+
+
+def _asyncio_exception_handler(
+    loop: asyncio.AbstractEventLoop, context: dict[str, Any]
+) -> None:
+    # Do default behavior (should log the exception) and then rip out
+    # exception tracebacks to hopefully avoid reference cycles which
+    # would require cyclic garbage collection.
+    loop.default_exception_handler(context)
+    exc = context.get('exception')
+    if isinstance(exc, BaseException):
+        strip_exception_tracebacks(exc)

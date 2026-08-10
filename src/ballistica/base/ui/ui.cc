@@ -16,7 +16,7 @@
 #include "ballistica/base/support/app_config.h"
 #include "ballistica/base/ui/dev_console.h"
 #include "ballistica/base/ui/ui_delegate.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/foundation/macros.h"
 #include "ballistica/shared/generic/utils.h"
@@ -24,7 +24,7 @@
 
 namespace ballistica::base {
 
-static const int kUIOwnerTimeoutSeconds = 30;
+static const int kUIOwnerTimeoutSeconds = 15;
 
 /// We use this to gather up runnables triggered by UI elements in response
 /// to stuff happening (mouse clicks, elements being added or removed,
@@ -33,9 +33,9 @@ static const int kUIOwnerTimeoutSeconds = 30;
 /// bad idea to schedule such runnables in the event loop, because a
 /// runnable may wish to modify the UI to prevent further runs from
 /// happening and that won't work if multiple runnables can be scheduled
-/// before the first runs. So our goldilocks approach here is to gather
-/// all runnables that get scheduled as part of each operation and then
-/// run them explicitly once we are safely out of any UI list traversal.
+/// before the first runs. So our goldilocks approach here is to gather all
+/// runnables that get scheduled as part of each operation and then run them
+/// explicitly once we are safely out of any UI list traversal.
 UI::OperationContext::OperationContext() {
   assert(g_base->InLogicThread());
 
@@ -54,14 +54,14 @@ UI::OperationContext::~OperationContext() {
     assert(g_base->ui->operation_context_ == this);
     g_base->ui->operation_context_ = nullptr;
   } else {
-    // If a context was set when we came into existence, it should
-    // still be that same context when we go out of existence.
+    // If a context was set when we came into existence, it should still be
+    // that same context when we go out of existence.
     assert(g_base->ui->operation_context_ == parent_);
     assert(runnables_.empty());
   }
 
-  // Complain if our Finish() call was never run (unless it seems we're being
-  // torn down as part of stack-unwinding due to an exception).
+  // Complain if our Finish() call was never run (unless it seems we're
+  // being torn down as part of stack-unwinding due to an exception).
   if (!ran_finish_ && !std::uncaught_exceptions()) {
     BA_LOG_ERROR_NATIVE_TRACE_ONCE(
         "UI::InteractionContext_ being torn down without Finish() called.");
@@ -145,7 +145,21 @@ UI::UI() {
       uiscale_ = g_core->platform->GetDefaultUIScale();
     }
   }
+
+  // Set touch-mode. In the future we'll update this dynamically depending
+  // on whether touch events or mouse events come through/etc.
+  touch_mode_ = !g_core->platform->IsRunningOnDesktop();
+
+  // Handy way to test touchscreen interaction from desktop.
+  // printf("FORCING TOUCH\n");
+  // touch_mode_ = true;
 }
+
+void UI::SetTouchMode(bool val) {
+  assert(g_base->InLogicThread());
+  touch_mode_ = val;
+}
+
 void UI::SetUIScale(UIScale val) {
   BA_PRECONDITION(g_base->InLogicThread());
   uiscale_ = val;
@@ -363,6 +377,10 @@ void UI::HandleMouseMotion(float x, float y) {
 void UI::SetMainUIInputDevice(InputDevice* device) {
   assert(g_base->InLogicThread());
 
+  // Any switch here resets mousing-in-main-ui mode. (otherwise sometimes
+  // highlighting doesn't start showing until second key press).
+  mousing_in_main_ui_ = false;
+
   if (device != main_ui_input_device_.get()) {
     g_core->logging->Log(LogName::kBaInput, LogLevel::kDebug, [device] {
       return "Main UI InputDevice is now "
@@ -397,10 +415,9 @@ void UI::Reset() {
 }
 
 auto UI::ShouldHighlightWidgets() const -> bool {
-  // Show selection highlights only if we've got controllers connected and
-  // only when the main UI is visible (dont want a selection highlight for
-  // toolbar buttons during a game).
-  return g_base->input->have_non_touch_inputs() && IsMainUIVisible();
+  // Show selection highlights only when a main ui is up and we're
+  // getting inputs from something besides a mouse or touchscreen.
+  return IsMainUIVisible() && !mousing_in_main_ui_;
 }
 
 auto UI::SendWidgetMessage(const WidgetMessage& m) -> bool {
@@ -489,7 +506,7 @@ auto UI::RequestMainUIControl(InputDevice* input_device) -> bool {
           kUIOwnerTimeoutSeconds
           - (time - last_main_ui_input_device_use_time_) / 1000;
       std::string time_out_str;
-      if (timeout > 0 && timeout < (kUIOwnerTimeoutSeconds - 10)) {
+      if (timeout > 0 && timeout < (kUIOwnerTimeoutSeconds - 3)) {
         time_out_str = " " + g_base->assets->GetResourceString("timeOutText");
         Utils::StringReplaceOne(&time_out_str, "${TIME}",
                                 std::to_string(timeout));
@@ -705,7 +722,7 @@ void UI::SetUIDelegate(base::UIDelegateInterface* delegate) {
   }
 }
 
-void UI::PushDevConsolePrintCall(const std::string& msg, float scale,
+void UI::PushDevConsolePrintCall(std::string_view msg, float scale,
                                  Vector4f color) {
   // Completely ignore this stuff in headless mode.
   if (g_core->HeadlessMode()) {
@@ -713,10 +730,13 @@ void UI::PushDevConsolePrintCall(const std::string& msg, float scale,
   }
   // If our event loop AND console are up and running, ship it off to be
   // printed. Otherwise store it for the console to grab when it's ready.
+  //
+  // IMPORTANT: We're holding a string_view here so we need to copy it into
+  // a string to keep it valid when its called later.
   if (auto* event_loop = g_base->logic->event_loop()) {
     if (dev_console_ != nullptr) {
-      event_loop->PushCall([this, msg, scale, color] {
-        dev_console_->Print(msg, scale, color);
+      event_loop->PushCall([this, msg_s = std::string(msg), scale, color] {
+        dev_console_->Print(msg_s.c_str(), scale, color);
       });
       return;
     }
@@ -741,7 +761,7 @@ void UI::OnAssetsAvailable() {
     // Print any messages that have built up.
     if (!dev_console_startup_messages_.empty()) {
       for (auto&& entry : dev_console_startup_messages_) {
-        dev_console_->Print(std::get<0>(entry), std::get<1>(entry),
+        dev_console_->Print(std::get<0>(entry).c_str(), std::get<1>(entry),
                             std::get<2>(entry));
       }
       dev_console_startup_messages_.clear();
@@ -779,6 +799,29 @@ void UI::PushUIOperationRunnable(Runnable* runnable) {
 auto UI::InUIOperation() -> bool {
   assert(g_base->InLogicThread());
   return operation_context_ != nullptr;
+}
+
+void UI::OnClickOrTap() {
+  assert(g_base->InLogicThread());
+
+  // Note that the user seems to be tapping/clicking their way around.
+  if (IsMainUIVisible()) {
+    if (!mousing_in_main_ui_) {
+      mousing_in_main_ui_ = true;
+    }
+  }
+}
+
+void UI::OnInputDeviceActive(InputDevice* device) {
+  assert(g_base->InLogicThread());
+
+  // Any input associated with a device is *not* touch/mouse input.
+  // Note that the user seems to be navigating UI in that manner.
+  if (GetMainUIInputDevice() == device && IsMainUIVisible()) {
+    if (mousing_in_main_ui_) {
+      mousing_in_main_ui_ = false;
+    }
+  }
 }
 
 }  // namespace ballistica::base

@@ -9,17 +9,17 @@
 
 #include "ballistica/base/app_adapter/app_adapter.h"
 #include "ballistica/base/app_mode/app_mode.h"
+#include "ballistica/base/app_platform/app_platform.h"
 #include "ballistica/base/assets/sound_asset.h"
 #include "ballistica/base/graphics/graphics.h"
 #include "ballistica/base/input/input.h"
 #include "ballistica/base/logic/logic.h"
-#include "ballistica/base/platform/base_platform.h"
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/python/class/python_class_simple_sound.h"
 #include "ballistica/base/support/app_config.h"
 #include "ballistica/base/ui/dev_console.h"
 #include "ballistica/base/ui/ui.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/foundation/macros.h"
 #include "ballistica/shared/generic/native_stack_trace.h"
@@ -1417,7 +1417,7 @@ static auto PyLockAllInput(PyObject* self, PyObject* args) -> PyObject* {
   BA_PYTHON_TRY;
   assert(g_base->InLogicThread());
   assert(g_base->input);
-  g_base->input->LockAllInput(false, Python::GetPythonFileLocation());
+  g_base->input->LockAllInput(false, Python::PythonFileLocation());
   Py_RETURN_NONE;
   BA_PYTHON_CATCH;
 }
@@ -1440,7 +1440,7 @@ static auto PyUnlockAllInput(PyObject* self, PyObject* args) -> PyObject* {
   BA_PYTHON_TRY;
   assert(g_base->InLogicThread());
   assert(g_base->input);
-  g_base->input->UnlockAllInput(false, Python::GetPythonFileLocation());
+  g_base->input->UnlockAllInput(false, Python::PythonFileLocation());
   Py_RETURN_NONE;
   BA_PYTHON_CATCH;
 }
@@ -2140,6 +2140,30 @@ static PyMethodDef PyUpdateInternalLoggerLevelsDef = {
     "is properly reflected in logs originating from the native layer.\n"
     "\n"
     ":meta private:"};
+
+// ----------------------------- reload_hooks ---------------------------------
+
+static auto PyReloadHooks(PyObject* self) -> PyObject* {
+  BA_PYTHON_TRY;
+
+  g_base->python->ReloadHooks();
+
+  Py_RETURN_NONE;
+  BA_PYTHON_CATCH;
+}
+
+static PyMethodDef PyReloadHooksDef = {
+    "reload_hooks",              // name
+    (PyCFunction)PyReloadHooks,  // method
+    METH_NOARGS,                 // flags
+
+    "reload_hooks() -> None\n"
+    "\n"
+    "Reload functions and other objects held by the native layer.\n"
+    "Call this if you replace things in a hooks module to get the\n"
+    "native layer to see your changes.",
+};
+
 // -----------------------------------------------------------------------------
 
 auto PythonMoethodsBase3::GetMethods() -> std::vector<PyMethodDef> {
@@ -2220,6 +2244,7 @@ auto PythonMoethodsBase3::GetMethods() -> std::vector<PyMethodDef> {
       PyUpdateInternalLoggerLevelsDef,
       PySuppressConfigAndStateWritesDef,
       PyGetSuppressConfigAndStateWritesDef,
+      PyReloadHooksDef,
   };
 }
 

@@ -338,7 +338,7 @@ auto SceneV1Python::DoNewNode(PyObject* args, PyObject* keywds) -> Node* {
     name = Python::GetString(name_obj);
   } else {
     // By default do something like 'text@foo.py:20'.
-    name = std::string(type) + "@" + Python::GetPythonFileLocation();
+    name = std::string(type) + "@" + Python::PythonFileLocation();
   }
 
   Scene* scene = ContextRefSceneV1::FromCurrent().GetMutableScene();
@@ -1509,6 +1509,16 @@ auto SceneV1Python::HandleCapturedJoystickEvent(const SDL_Event& event,
         "Python key-press callbacks do not work with this input-device class.");
   }
   return true;
+}
+
+void SceneV1Python::ReloadHooks() {
+  // Object-sets normally complain if values within it are set more than
+  // once; disable that here to allow us to reload.
+  objs_.set_allow_overwrites(true);
+
+  ImportPythonObjs();
+
+  objs_.set_allow_overwrites(false);
 }
 
 }  // namespace ballistica::scene_v1

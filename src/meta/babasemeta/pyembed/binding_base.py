@@ -7,7 +7,6 @@ from __future__ import annotations
 from bacommon.app import AppArchitecture, AppPlatform, AppVariant
 from babase._mgen import enums
 
-# noinspection PyProtectedMember
 from babase import _language, _apputils, _hooks, _env, _error, _general, _ui
 
 # The C++ layer looks for this variable:
@@ -53,7 +52,7 @@ values = [
     _hooks.get_v2_account_id,  # kGetV2AccountIdCall
     _hooks.copy_dev_console_history,  # kCopyDevConsoleHistoryCall
     _language.Lstr,  # kLStrClass
-    _general.Call,  # kCallClass
+    _general.CallPartial,  # kCallPartialClass
     _error.ContextError,  # kContextError
     _error.NotFoundError,  # kNotFoundError
     _error.NodeNotFoundError,  # kNodeNotFoundError
@@ -81,4 +80,7 @@ values = [
     AppArchitecture,  # kAppArchitectureType
     AppPlatform,  # kAppPlatformType
     AppVariant,  # kAppVariantType
+    _hooks.v2_auth_request,  # kV2AuthRequestCall
+    _hooks.v2_auth_data,  # kV2AuthDataCall
+    _hooks.start_native_repl,  # kStartNativeReplCall
 ]

@@ -151,7 +151,8 @@ enum class Permission : uint8_t {
 };
 
 // BA_EXPORT_PYTHON_ENUM
-/// Special characters the game can print.
+/// Special characters the engine can diplay. Note that this currently
+/// needs to be manually kept in sync with bacommon.text.SpecialChar.
 enum class SpecialChar : uint8_t {
   kDownArrow,
   kUpArrow,
@@ -250,6 +251,11 @@ enum class SpecialChar : uint8_t {
   kFlagChile,
   kMikirog,
   kV2Logo,
+  kClose,
+  kSantaHat,
+  kPotato,
+  kPalmTree,
+  kBoxingGlove,
   kLast  // Sentinel
 };
 
@@ -280,6 +286,7 @@ enum class LogName : uint8_t {
   kRoot,
   kBa,
   kBaApp,
+  kBaAccount,
   kBaDisplayTime,
   kBaLifecycle,
   kBaAudio,
@@ -287,6 +294,7 @@ enum class LogName : uint8_t {
   kBaPerformance,
   kBaAssets,
   kBaInput,
+  kBaUI,
   kBaNetworking,
   kLast  // Sentinel
 };

@@ -35,6 +35,7 @@ class ConnectionSet {
     return connection_to_host_.get();
   }
   auto GetConnectionToHostUDP() -> ConnectionToHostUDP*;
+  auto GetClientIP(int client_id) -> std::string;
 
   auto connections_to_clients()
       -> const std::unordered_map<int, Object::Ref<ConnectionToClient> >& {

@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include <arpa/inet.h>
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/networking/network_writer.h"
 #include "ballistica/classic/support/classic_app_mode.h"
@@ -55,11 +56,13 @@ void ConnectionToClientUDP::Update() {
   auto current_time_millisecs =
       static_cast<millisecs_t>(g_base->logic->display_time() * 1000.0);
 
-  // if its been long enough since we've heard anything from the host, error.
+  // If its been long enough since we've heard anything from the host,
+  // error.
   if (current_time_millisecs - last_client_response_time_millisecs_
-      > (can_communicate() ? 10000u : 5000u)) {
-    // die immediately in this case; no use trying to wait for a
-    // disconnect-ack since we've already given up hope of hearing from them..
+      > (can_communicate() ? 30000u : 10000u)) {
+    // Die immediately in this case; no use trying to wait for a
+    // disconnect-ack since we've already given up hope of hearing from
+    // them.
     Die();
     return;
   }
@@ -87,6 +90,21 @@ void ConnectionToClientUDP::Die() {
 
 auto ConnectionToClientUDP::GetAsUDP() -> ConnectionToClientUDP* {
   return this;
+}
+
+auto ConnectionToClientUDP::GetIPAddress() const -> std::string {
+  char ip_str[INET6_ADDRSTRLEN] = {0};
+  const auto* sa = reinterpret_cast<const sockaddr*>(&addr_.get_sockaddr());
+
+  if (sa->sa_family == AF_INET) {
+    const auto* sin = reinterpret_cast<const sockaddr_in*>(sa);
+    inet_ntop(AF_INET, &(sin->sin_addr), ip_str, sizeof(ip_str));
+  } else if (sa->sa_family == AF_INET6) {
+    const auto* sin6 = reinterpret_cast<const sockaddr_in6*>(sa);
+    inet_ntop(AF_INET6, &(sin6->sin6_addr), ip_str, sizeof(ip_str));
+  }
+
+  return std::string(ip_str);
 }
 
 void ConnectionToClientUDP::RequestDisconnect() {

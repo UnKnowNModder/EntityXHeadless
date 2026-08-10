@@ -11,12 +11,19 @@
 
 #include "ballistica/core/core.h"
 #include "ballistica/core/logging/logging.h"
-#include "ballistica/core/logging/logging_macros.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/core/support/base_soft.h"
 #include "ballistica/shared/foundation/fatal_error.h"
 
 namespace ballistica {
+
+// Special flags we can safely access from interrupt/ctrl handlers.
+#if BA_PLATFORM_WINDOWS
+std::atomic<bool> g_event_loop_got_ctrl_c{};
+#else
+volatile sig_atomic_t g_event_loop_got_sigint{};
+volatile sig_atomic_t g_event_loop_got_sigterm{};
+#endif
 
 // Note: implicitly using core here so will fail spectacularly if that has
 // not been imported by someone.
@@ -240,35 +247,15 @@ void EventLoop::WaitForNextEvent_(bool single_cycle) {
   }
 }
 
-// Note to self (Oct '23): can probably kill this at some point,
-// but am still using some non-ARC objc stuff from logic thread
-// so should keep it around just a bit longer just in case.
-// void EventLoop::LoopUpkeep_(bool single_cycle) {
-//  assert(g_core);
-//  // Keep our autorelease pool clean on mac/ios
-//  // FIXME: Should define a CorePlatform::ThreadHelper or something
-//  //  so we don't have platform-specific code here.
-// #if BA_XCODE_BUILD
-//  // Let's not do autorelease pools when being called ad-hoc,
-//  // since in that case we're part of another run loop
-//  // (and its crashing on drain for some reason)
-//  if (!single_cycle) {
-//    if (auto_release_pool_) {
-//      g_core->platform->DrainAutoReleasePool(auto_release_pool_);
-//      auto_release_pool_ = nullptr;
-//    }
-//    auto_release_pool_ = g_core->platform->NewAutoReleasePool();
-//  }
-// #endif
-//}
-
 void EventLoop::RunToCompletion() { Run_(false); }
 void EventLoop::RunSingleCycle() { Run_(true); }
 
 void EventLoop::Run_(bool single_cycle) {
   assert(g_core);
   while (true) {
-    // LoopUpkeep_(single_cycle);
+    if (identifier_ == EventLoopID::kLogic) {
+      CheckInterrupts_();
+    }
 
     WaitForNextEvent_(single_cycle);
 
@@ -317,6 +304,30 @@ void EventLoop::Run_(bool single_cycle) {
       break;
     }
   }
+}
+
+void EventLoop::CheckInterrupts_() {
+  // This might get called once or twice before we've been assigned as
+  // the logic-thread; avoid until that point.
+  if (!g_base_soft || !g_base_soft->InLogicThread()) {
+    return;
+  }
+
+#if BA_PLATFORM_WINDOWS
+  if (g_event_loop_got_ctrl_c) {
+    PushCall([] { g_base_soft->HandleInterruptSignal(); });
+    g_event_loop_got_ctrl_c = false;
+  }
+#else
+  if (g_event_loop_got_sigint) {
+    PushCall([] { g_base_soft->HandleInterruptSignal(); });
+    g_event_loop_got_sigint = 0;
+  }
+  if (g_event_loop_got_sigterm) {
+    PushCall([] { g_base_soft->HandleTerminateSignal(); });
+    g_event_loop_got_sigterm = 0;
+  }
+#endif
 }
 
 void EventLoop::GetThreadMessages_(std::list<ThreadMessage_>* messages) {
@@ -502,6 +513,8 @@ void EventLoop::PushThreadMessage_(const ThreadMessage_& t) {
 
     // Plop the data on to the list; we're assuming the mutex is locked.
     thread_messages_.push_back(t);
+    thread_messages_size_approx_.store(thread_messages_.size(),
+                                       std::memory_order_relaxed);
 
     // Debugging: show message count states.
     if (explicit_bool(false)) {
@@ -713,18 +726,25 @@ auto EventLoop::CheckPushSafety() -> bool {
     return CheckPushRunnableSafety_();
   }
 }
-auto EventLoop::CheckPushRunnableSafety_() -> bool {
-  std::scoped_lock lock(thread_message_mutex_);
 
-  auto have_space{thread_messages_.size() < kThreadMessageSafetyThreshold};
+auto EventLoop::CheckPushRunnableSafety_() -> bool {
+  // Use our approximate value here to avoid blocking acquiring the list
+  // lock (was seeing this spot show up a lot in ANR reports).
+  auto have_space{thread_messages_size_approx_.load(std::memory_order_relaxed)
+                  < kThreadMessageSafetyThreshold};
 
   // If we've hit the safety threshold, log the traceback once so we can
   // hopefully fix the problem at the call site instead of dropping calls.
-  if (!have_space) {
-    BA_LOG_ERROR_NATIVE_TRACE_ONCE(
-        "CheckPushSafety threshold reached; are you calling something too "
-        "much?");
-  }
+  //
+  // UPDATE: No longer logging here for now. Logging itself acquires the GIL
+  // which is likely to block (especially if the thread itself is busy
+  // working which is likely what leads to this condition being true). The
+  // whole point of this call is to *avoid* blocking.
+  // if (!have_space) {
+  //   BA_LOG_ERROR_NATIVE_TRACE_ONCE(
+  //       "CheckPushSafety threshold reached; are you calling something too "
+  //       "much?");
+  // }
   return have_space;
 }
 
@@ -732,7 +752,7 @@ void EventLoop::AcquireGIL_() {
   assert(g_base_soft && g_base_soft->InLogicThread());
   auto debug_timing{g_core->core_config().debug_timing};
   millisecs_t startmillisecs{
-      debug_timing ? core::CorePlatform::TimeMonotonicMillisecs() : 0};
+      debug_timing ? core::Platform::TimeMonotonicMillisecs() : 0};
 
   if (py_thread_state_) {
     PyEval_RestoreThread(py_thread_state_);
@@ -740,8 +760,7 @@ void EventLoop::AcquireGIL_() {
   }
 
   if (debug_timing) {
-    auto duration{core::CorePlatform::TimeMonotonicMillisecs()
-                  - startmillisecs};
+    auto duration{core::Platform::TimeMonotonicMillisecs() - startmillisecs};
     if (duration > (1000 / 120)) {
       g_core->logging->Log(LogName::kBa, LogLevel::kInfo,
                            "GIL acquire took too long ("

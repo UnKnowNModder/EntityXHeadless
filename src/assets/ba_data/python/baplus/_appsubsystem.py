@@ -1,6 +1,7 @@
 # Released under the MIT License. See LICENSE for details.
 #
 """Provides plus app subsystem."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, override
@@ -13,7 +14,7 @@ from baplus._ads import AdsSubsystem
 if TYPE_CHECKING:
     from typing import Callable, Any
 
-    import bacommon.bs
+    import bacommon.classic
     from babase import AccountV2Subsystem
 
     from baplus._cloud import CloudSubsystem
@@ -61,12 +62,36 @@ class PlusAppSubsystem(AppSubsystem):
         return _baplus.game_service_has_leaderboard(game, config)
 
     @staticmethod
-    def get_master_server_address(source: int = -1, version: int = 1) -> str:
+    def get_legacy_master_server_address() -> str:
+        """Return the address of the old master server.
+
+        :meta private:
+        """
+        return _baplus.get_legacy_master_server_address()
+
+    @staticmethod
+    def get_master_server_address() -> str:
         """Return the address of the master server.
 
         :meta private:
         """
-        return _baplus.get_master_server_address(source, version)
+        return _baplus.get_master_server_address()
+
+    @staticmethod
+    def get_bootstrap_server_addresses() -> list[str]:
+        """Return addresses we can use to establish regional connection.
+
+        :meta private:
+        """
+        return _baplus.get_bootstrap_server_addresses()
+
+    @staticmethod
+    def get_bootstrap_server_address() -> str:
+        """Return address we can use to establish regional connection.
+
+        :meta private:
+        """
+        return _baplus.get_bootstrap_server_address()
 
     @staticmethod
     def get_classic_news_show() -> str:
@@ -117,14 +142,6 @@ class PlusAppSubsystem(AppSubsystem):
     def get_v1_account_state_num() -> int:
         """:meta private:"""
         return _baplus.get_v1_account_state_num()
-
-    # @staticmethod
-    # def get_v1_account_ticket_count() -> int:
-    #     """Return the number of tickets for the current account.
-
-    #     :meta private:
-    #     """
-    #     return _baplus.get_v1_account_ticket_count()
 
     @staticmethod
     def get_v1_account_type() -> str:

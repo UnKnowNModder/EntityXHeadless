@@ -2,13 +2,18 @@
 
 #include "ballistica/shared/ballistica.h"
 
+#include <chrono>
+#include <cstdio>
+#include <memory>
 #include <string>
+#include <thread>
 
 #include "ballistica/core/logging/logging.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/core/platform/support/min_sdl.h"
 #include "ballistica/core/python/core_python.h"
 #include "ballistica/core/support/base_soft.h"
+#include "ballistica/shared/buildconfig/buildconfig_common.h"
 #include "ballistica/shared/foundation/fatal_error.h"
 #include "ballistica/shared/python/python.h"
 #include "ballistica/shared/python/python_command.h"
@@ -39,8 +44,8 @@ auto main(int argc, char** argv) -> int {
 namespace ballistica {
 
 // These are set automatically via script; don't modify them here.
-const int kEngineBuildNumber = 22471;
-const char* kEngineVersion = "1.7.46";
+const int kEngineBuildNumber = 22767;
+const char* kEngineVersion = "1.7.61";
 const int kEngineApiVersion = 9;
 
 #if BA_MONOLITHIC_BUILD
@@ -53,7 +58,7 @@ auto MonolithicMain(const core::CoreConfig& core_config) -> int {
   core::BaseSoftInterface* l_base{};
 
   try {
-    auto time1 = core::CorePlatform::TimeMonotonicMillisecs();
+    auto time1 = core::Platform::TimeMonotonicMillisecs();
 
     // Even at the absolute start of execution we should be able to
     // reasonably log errors. Set env var BA_CRASH_TEST=1 to test this.
@@ -68,7 +73,7 @@ auto MonolithicMain(const core::CoreConfig& core_config) -> int {
     // import it first thing even if we don't explicitly use it.
     l_core = core::CoreFeatureSet::Import(&core_config);
 
-    auto time2 = core::CorePlatform::TimeMonotonicMillisecs();
+    auto time2 = core::Platform::TimeMonotonicMillisecs();
 
     // If a command was passed, simply run it and exit. We want to act
     // simply as a Python interpreter in that case; we don't do any
@@ -101,9 +106,10 @@ auto MonolithicMain(const core::CoreConfig& core_config) -> int {
     // (essentially the baenv.configure() call). This needs to be done
     // before any other ba* modules are imported since it may affect where
     // those modules get loaded from in the first place.
+    l_core->python->MonolithicModeBaEnvImport();
     l_core->python->MonolithicModeBaEnvConfigure();
 
-    auto time3 = core::CorePlatform::TimeMonotonicMillisecs();
+    auto time3 = core::Platform::TimeMonotonicMillisecs();
 
     // We need the base feature-set to run a full app but we don't have a hard
     // dependency to it. Let's see if it's available.
@@ -112,7 +118,7 @@ auto MonolithicMain(const core::CoreConfig& core_config) -> int {
       FatalError("Base module unavailable; can't run app.");
     }
 
-    auto time4 = core::CorePlatform::TimeMonotonicMillisecs();
+    auto time4 = core::Platform::TimeMonotonicMillisecs();
 
     // -------------------------------------------------------------------------
     // Phase 2: "The pieces are moving."
@@ -131,7 +137,7 @@ auto MonolithicMain(const core::CoreConfig& core_config) -> int {
     // environment do that part).
 
     // Make noise if it takes us too long to get to this point.
-    auto time5 = core::CorePlatform::TimeMonotonicMillisecs();
+    auto time5 = core::Platform::TimeMonotonicMillisecs();
     auto total_duration = time5 - time1;
     if (total_duration > 5000) {
       auto core_import_duration = time2 - time1;
@@ -221,24 +227,103 @@ class IncrementalInitRunner_ {
       switch (step_) {
         case 0:
           core_ = core::CoreFeatureSet::Import(&config_);
+          // At this point, go ahead and release the GIL. We'll need to
+          // explicitly grab it when we need it going forward.
+          Python::PermanentlyReleaseGIL();
+
+          step_++;
+          last_step_time_ = core::Platform::TimeMonotonicSeconds();
+          return false;
+
+        case 1: {
+          Python::ScopedInterpreterLock gil_acquire;
+          core_->python->WarmStart1();
+
+          // Launch a thread which spins and waits for the Python bg stuff
+          // we just launched to complete. We do this in a separate thread
+          // because even acquiring the GIL to make the check in the main
+          // thread can be enough to trigger ANRs on slower hardware.
+          thread_ = std::make_unique<std::thread>([this] {
+            while (explicit_bool(true)) {
+              {
+                Python::ScopedInterpreterLock gil_acquire;
+                if (core_->python->WarmStart1Completed()) {
+                  warm_start_completed_ = true;
+                  break;
+                }
+              }
+              std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+          });
+
+          LogStepTime_(step_);
           step_++;
           return false;
-        case 1:
+        }
+
+        case 2: {
+          // This step is a special case; the previous step kicked off a
+          // bunch of background work and in this step we simply poll for it
+          // to finish, returning periodically to avoid ANRs. Note that we
+          // DON'T need to acquire the GIL here since we kicked off a
+          // background thread to set a plain old bool we can watch for.
+          auto starttime{core::Platform::TimeMonotonicMillisecs()};
+          while (explicit_bool(true)) {
+            if (core::Platform::TimeMonotonicMillisecs() - starttime > 1000) {
+              // Out of time this pass.
+              LogStepTime_(step_);
+              return false;
+            }
+            if (warm_start_completed_) {
+              // Our thread that set this should be done.
+              thread_->join();
+
+              // We finished this step.
+              LogStepTime_(step_);
+              step_++;
+              return false;
+            }
+            // Sleep for short bits while the warm start bg stuff is going
+            // so they get most of the cpu.
+            core::Platform::SleepMillisecs(1);
+          }
+        }
+
+        case 3: {
+          Python::ScopedInterpreterLock gil_acquire;
+          core_->python->MonolithicModeBaEnvImport();
+          LogStepTime_(step_);
+          step_++;
+          return false;
+        }
+
+        case 4: {
+          Python::ScopedInterpreterLock gil_acquire;
           core_->python->MonolithicModeBaEnvConfigure();
+          LogStepTime_(step_);
           step_++;
           return false;
-        case 2:
+        }
+
+        case 5: {
+          Python::ScopedInterpreterLock gil_acquire;
           base_ = core_->SoftImportBase();
           if (!base_) {
             FatalError("Base module unavailable; can't run app.");
           }
+          LogStepTime_(step_);
           step_++;
           return false;
-        case 3:
+        }
+
+        case 6: {
+          Python::ScopedInterpreterLock gil_acquire;
           base_->StartApp();
-          Python::PermanentlyReleaseGIL();
+          LogStepTime_(step_);
           step_++;
           return false;
+        }
+
         default:
           return true;
       }
@@ -277,8 +362,29 @@ class IncrementalInitRunner_ {
   }
 
  private:
+  /// On Android we want to try and space our steps out (namely our
+  /// warm-start steps) so that they take roughly equal amounts of time (and
+  /// minimize the chances of us triggering ANR reports by hogging the main
+  /// thread too long). Use this log message to calibrate that.
+  void LogStepTime_(int step) {
+    // Currently only showing this on Android where its relevant.
+    if (!g_buildconfig.platform_android() || !g_buildconfig.debug_build()) {
+      return;
+    }
+    char buffer[256];
+    auto now{core::Platform::TimeMonotonicSeconds()};
+    snprintf(buffer, sizeof(buffer), "Incremental init step %d took %.3fs.",
+             step, now - last_step_time_);
+    core_->platform->EmitPlatformLog("ba_native_incr_init", LogLevel::kDebug,
+                                     buffer);
+    last_step_time_ = now;
+  }
+
   int step_{};
+  seconds_t last_step_time_{};
   bool zombie_{};
+  bool warm_start_completed_{};
+  std::unique_ptr<std::thread> thread_{};
   core::CoreConfig config_;
   core::CoreFeatureSet* core_{};
   core::BaseSoftInterface* base_{};

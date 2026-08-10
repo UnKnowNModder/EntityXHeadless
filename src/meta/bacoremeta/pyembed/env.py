@@ -83,3 +83,70 @@ def pre_finalize() -> None:
             call()
         except Exception:
             logging.exception('Error in pre_finalize_call.')
+
+
+# The following warm_start calls are used by MonolithicMainIncremental
+# to pull in Python stdlib stuff that we always use. This allows us to
+# break importing into roughly equal (time-wise) pieces that we can run
+# spaced out in the main thread without triggering app-not-responding
+# reports. This is especially important now that we generate our own
+# .pyc files on the fly; importing all this stuff at once on a slow
+# mobile device can take a bit of time.
+
+
+_g_warm_start_1_completed = False
+
+
+def warm_start_1() -> None:
+    """Early import python bits we'll be using later."""
+    import threading
+
+    threading.Thread(target=_warm_start_imports).start()
+
+
+def _warm_start_imports() -> None:
+    # pylint: disable=unused-import
+    # pylint: disable=global-statement
+    # pylint: disable=too-many-locals
+    import os
+    import ssl
+    import zlib
+    import json
+    import time
+    import copy
+    import stat
+    import fcntl
+    import email
+    import socket
+    import locale
+    import random
+    import shutil
+    import string
+    import zipfile
+    import inspect
+    import logging
+    import weakref
+    import hashlib
+    import pathlib
+    import warnings
+    import textwrap
+    import tempfile
+    import datetime
+    import traceback
+    import functools
+    import encodings
+    import importlib
+    import contextlib
+    import dataclasses
+    import urllib.parse
+    import collections.abc
+    import concurrent.futures
+    import asyncio
+
+    global _g_warm_start_1_completed
+    _g_warm_start_1_completed = True
+
+
+def warm_start_1_completed() -> bool:
+    """Is warm-start-1 done?"""
+    return _g_warm_start_1_completed

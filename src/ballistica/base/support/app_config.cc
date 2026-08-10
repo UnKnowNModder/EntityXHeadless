@@ -2,13 +2,15 @@
 
 #include "ballistica/base/support/app_config.h"
 
+#include <cstdio>
 #include <string>
 #include <utility>
 
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/core/core.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/shared/ballistica.h"
+#include "ballistica/shared/buildconfig/buildconfig_common.h"
 
 namespace ballistica::base {
 
@@ -206,8 +208,16 @@ void AppConfig::SetupEntries_() {
 
   int_entries_[IntID::kPort] = IntEntry("Port", kDefaultPort);
   int_entries_[IntID::kMaxFPS] = IntEntry("Max FPS", 60);
-  int_entries_[IntID::kSceneV1HostProtocol] =
-      IntEntry("SceneV1 Host Protocol", 33);
+
+  // TEMP - forcing protocol 36 while I test v2 auth.
+  if (g_buildconfig.headless_build() && explicit_bool(false)) {
+    int_entries_[IntID::kSceneV1HostProtocol] =
+        IntEntry("SceneV1 Host Protocol", 36);
+    printf("TEMP DOING PROTOCOL 36 DEFAULT!!!\n");
+  } else {
+    int_entries_[IntID::kSceneV1HostProtocol] =
+        IntEntry("SceneV1 Host Protocol", 33);
+  }
 
   bool_entries_[BoolID::kTouchControlsSwipeHidden] =
       BoolEntry("Touch Controls Swipe Hidden", false);
@@ -242,6 +252,8 @@ void AppConfig::SetupEntries_() {
       BoolEntry("Show Deprecated Login Types", false);
   bool_entries_[BoolID::kHighlightPotentialTokenPurchases] =
       BoolEntry("Highlight Potential Token Purchases", true);
+  bool_entries_[BoolID::kUseNativePythonREPL] =
+      BoolEntry("Use Native Python REPL", false);
 
   // Now add everything to our name map and make sure all is kosher.
   CompleteMap_(float_entries_);

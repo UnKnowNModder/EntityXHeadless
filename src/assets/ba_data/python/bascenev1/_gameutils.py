@@ -83,7 +83,6 @@ def animate(
     # FIXME: Even if we are looping we should have a way to die once we
     #  get disconnected.
     if not loop:
-        # noinspection PyUnresolvedReferences
         _bascenev1.timer(
             (int(mult * items[-1][0]) + 1000) / 1000.0, curve.delete
         )
@@ -146,8 +145,6 @@ def animate_array(
         # If we're not looping, set a timer to kill this
         # curve after its done its job.
         if not loop:
-            # (PyCharm seems to think item is a float, not a tuple)
-            # noinspection PyUnresolvedReferences
             _bascenev1.timer(
                 (int(mult * items[-1][0]) + 1000) / 1000.0,
                 curve.delete,
@@ -159,8 +156,6 @@ def animate_array(
     # FIXME: Even if we are looping we should have a way to die
     #  once we get disconnected.
     if not loop:
-        # (PyCharm seems to think item is a float, not a tuple)
-        # noinspection PyUnresolvedReferences
         _bascenev1.timer(
             (int(mult * items[-1][0]) + 1000) / 1000.0, combine.delete
         )
@@ -173,7 +168,6 @@ def show_damage_count(
     dead: bool = False,
 ) -> None:
     """Pop up a damage count at a position in space."""
-    # pylint: disable=too-many-locals
     lifespan = 1.0
     app = babase.app
 
@@ -236,7 +230,6 @@ def cameraflash(duration: float = 999.0) -> None:
     (as seen when a team wins a game)
     Duration is in seconds.
     """
-    # pylint: disable=too-many-locals
     from bascenev1._nodeactor import NodeActor
 
     x_spread = 10

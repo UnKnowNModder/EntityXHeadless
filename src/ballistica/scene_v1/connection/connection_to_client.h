@@ -25,6 +25,7 @@ class ConnectionToClient : public Connection {
 
   // More efficient than dynamic_cast (hmm do we still want this?).
   virtual auto GetAsUDP() -> ConnectionToClientUDP*;
+  virtual auto GetIPAddress() const -> std::string { return ""; }
   void SetController(ClientControllerInterface* c);
   auto GetPlayerProfiles() const -> PyObject* { return player_profiles_.get(); }
   auto build_number() const -> int { return build_number_; }
@@ -82,7 +83,7 @@ class ConnectionToClient : public Connection {
   std::string token_;
   std::string peer_hash_;
   PythonRef player_profiles_;
-  bool got_info_from_master_server_{};
+  bool got_v1_auth_from_master_server_{};
   std::vector<millisecs_t> last_chat_times_;
   millisecs_t next_kick_vote_allow_time_{};
   millisecs_t chat_block_time_{};

@@ -17,6 +17,7 @@
 #include "ballistica/base/python/methods/python_methods_base_1.h"
 #include "ballistica/base/python/methods/python_methods_base_2.h"
 #include "ballistica/base/python/methods/python_methods_base_3.h"
+#include "ballistica/base/python/methods/python_methods_test.h"
 #include "ballistica/core/core.h"
 #include "ballistica/shared/python/python_command.h"  // IWYU pragma: keep.
 #include "ballistica/shared/python/python_module_builder.h"
@@ -33,6 +34,7 @@ extern "C" auto PyInit__babase() -> PyObject* {
                                   PythonMethodsBase1::GetMethods(),
                                   PythonMoethodsBase3::GetMethods(),
                                   PythonMethodsBase2::GetMethods(),
+                                  PythonMethodsTest::GetMethods(),
                               },
                               [](PyObject* module) -> int {
                                 BA_PYTHON_TRY;
@@ -267,12 +269,12 @@ auto BasePython::GetPyLString(PyObject* o) -> std::string {
     if (result == 1) {
       // At this point its not a simple type error if something goes wonky.
       // Perhaps we should try to preserve any error type raised by
-      // the _get_json() call...
+      // the as_json() call...
       exctype = PyExcType::kRuntime;
-      PythonRef get_json_call(PyObject_GetAttrString(o, "_get_json"),
-                              PythonRef::kSteal);
-      if (get_json_call.CallableCheck()) {
-        PythonRef json = get_json_call.Call();
+      PythonRef as_json_call(PyObject_GetAttrString(o, "as_json"),
+                             PythonRef::kSteal);
+      if (as_json_call.CallableCheck()) {
+        PythonRef json = as_json_call.Call();
         if (PyUnicode_Check(json.get())) {
           return PyUnicode_AsUTF8(json.get());
         }
@@ -617,7 +619,7 @@ void BasePython::RunDeepLink(const std::string& url) {
 }
 
 auto BasePython::DoOnce() -> bool {
-  std::string location = Python::GetPythonFileLocation(false);
+  std::string location = Python::PythonFileLocation(false);
   if (do_once_locations_.find(location) != do_once_locations_.end()) {
     return false;
   }
@@ -650,6 +652,21 @@ auto BasePython::CanPyStringEditAdapterBeReplaced(PyObject* o) -> bool {
 void BasePython::OnAppActiveChanged() {
   assert(g_base->InLogicThread());
   objs().Get(ObjID::kAppOnNativeActiveChangedCall).Call();
+}
+
+void BasePython::ReloadHooks() {
+  // Sanity-check; we should only be reloading our stuff *after* we've
+  // initially loaded our stuff.
+  assert(g_base->base_import_completed());
+
+  // Object-sets normally complain if values within it are set more than
+  // once; disable that here to allow us to reload.
+  objs_.set_allow_overwrites(true);
+
+  ImportPythonObjs();
+  ImportPythonAppObjs();
+
+  objs_.set_allow_overwrites(false);
 }
 
 }  // namespace ballistica::base

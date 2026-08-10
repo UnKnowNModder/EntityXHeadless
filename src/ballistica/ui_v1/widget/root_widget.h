@@ -35,6 +35,7 @@ class RootWidget : public ContainerWidget {
 
   /// Called when UIScale or screen dimensions change.
   void OnUIScaleChange();
+  void OnUIOpenStateChange();
 
   void OnLanguageChange() override;
   void UpdateLayout() override;
@@ -49,6 +50,7 @@ class RootWidget : public ContainerWidget {
   void SetLevelText(const std::string& val);
   void SetXPText(const std::string& val);
   void SetInboxState(int val, bool is_max, const std::string& announce_text);
+  void SetStoreStyle(const std::string& val);
   void SetChests(const std::string& chest_0_appearance,
                  const std::string& chest_1_appearance,
                  const std::string& chest_2_appearance,
@@ -108,6 +110,8 @@ class RootWidget : public ContainerWidget {
   enum class MeterType_ { kLevel, kTrophy, kTickets, kTokens };
   enum class VAlign_ { kTop, kCenter, kBottom };
 
+  void UpdateTrophyMeterButtonColor_();
+  void UpdateTrophyIconColor_();
   auto GetTimeStr_(seconds_t diff, bool animating) -> std::string;
   void UpdateChests_();
   void UpdateTokensMeterText_();
@@ -122,8 +126,9 @@ class RootWidget : public ContainerWidget {
   void StepTicketsMeter_(base::RenderPass* renderpass, seconds_t dt);
   void StepTokensMeter_(base::RenderPass* renderpass, seconds_t dt);
   void AddMeter_(MeterType_ type, float h_align, float r, float g, float b,
-                 bool plus, const std::string& s);
+                 bool plus, const std::string& s, const std::string& widget_id);
   void UpdateTokensMeterTextColor_();
+  void UpdateAccountButtonColor_();
   void ShowTrophyMeterAnnotation_(const std::string& val,
                                   const Vector3f& color);
   void HideTrophyMeterAnnotation_();
@@ -145,6 +150,7 @@ class RootWidget : public ContainerWidget {
   std::string league_type_value_;
   std::string inbox_announce_text_str_;
   std::string open_me_text_;
+  std::string store_style_;
   std::list<Button_> buttons_;
   std::list<Text_> texts_;
   std::list<Image_> images_;
@@ -152,6 +158,8 @@ class RootWidget : public ContainerWidget {
   std::vector<Button_*> top_right_buttons_;
   std::vector<Button_*> bottom_left_buttons_;
   std::vector<Button_*> bottom_right_buttons_;
+  Vector3f trophy_meter_mult_{1.0f, 1.0f, 1.0f};
+  Vector3f account_button_mult_{1.0f, 1.0f, 1.0f};
   StackWidget* screen_stack_widget_{};
   StackWidget* overlay_stack_widget_{};
   Button_* back_button_{};
@@ -173,6 +181,7 @@ class RootWidget : public ContainerWidget {
   Image_* tickets_meter_icon_{};
   Image_* tokens_meter_icon_{};
   Image_* inbox_count_backing_{};
+  Image_* store_decoration_{};
   Text_* squad_size_text_{};
   Text_* account_name_text_{};
   Text_* tickets_meter_text_{};
@@ -184,6 +193,7 @@ class RootWidget : public ContainerWidget {
   Text_* inbox_count_text_{};
   Text_* inbox_announce_text_{};
   Text_* trophy_meter_annotation_text_{};
+  Text_* back_button_text_{};
   seconds_t update_pause_total_time_{};
   seconds_t last_chests_step_time_{-1.0f};
   seconds_t update_time_{};
@@ -216,7 +226,11 @@ class RootWidget : public ContainerWidget {
   std::optional<uint32_t> chest_unlock_time_anim_sound_play_id_{};
   std::optional<uint32_t> tickets_anim_sound_play_id_{};
   std::optional<uint32_t> tokens_anim_sound_play_id_{};
-  ToolbarVisibility toolbar_visibility_{ToolbarVisibility::kInGame};
+  ToolbarVisibility root_widget_toolbar_visibility_{ToolbarVisibility::kInGame};
+  ToolbarCancelButtonStyle root_widget_toolbar_cancel_button_style_{
+      ToolbarCancelButtonStyle::kBack};
+  ToolbarCancelButtonStyle root_widget_toolbar_cancel_button_style_vis_{
+      ToolbarCancelButtonStyle::kBack};
   bool child_widgets_dirty_{true};
   bool in_main_menu_{};
   bool gold_pass_{};
@@ -231,6 +245,9 @@ class RootWidget : public ContainerWidget {
   bool tickets_meter_animating_{};
   bool tokens_meter_animating_{};
   bool highlight_potential_token_purchases_{};
+  bool ui_open_states_dirty_{true};
+  bool account_button_signed_in_{};
+  bool trophy_meter_open_{};
 
   static int update_pause_count_;
 };

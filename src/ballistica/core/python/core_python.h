@@ -34,6 +34,8 @@ class CorePython {
     kLoggerRootLogCall,
     kLoggerBa,
     kLoggerBaLogCall,
+    kLoggerBaAccount,
+    kLoggerBaAccountLogCall,
     kLoggerBaApp,
     kLoggerBaAppLogCall,
     kLoggerBaAudio,
@@ -50,9 +52,13 @@ class CorePython {
     kLoggerBaAssetsLogCall,
     kLoggerBaInput,
     kLoggerBaInputLogCall,
+    kLoggerBaUI,
+    kLoggerBaUILogCall,
     kLoggerBaNetworking,
     kLoggerBaNetworkingLogCall,
     kPrependSysPathCall,
+    kWarmStart1Call,
+    kWarmStart1CompletedCall,
     kBaEnvConfigureCall,
     kBaEnvGetConfigCall,
     kBaEnvAtExitCall,
@@ -70,6 +76,7 @@ class CorePython {
   void FinalizePython();
 
   /// Run baenv.configure() with all of our monolithic-mode paths/etc.
+  void MonolithicModeBaEnvImport();
   void MonolithicModeBaEnvConfigure();
 
   /// Call once we should start forwarding our Log calls (along with all
@@ -80,7 +87,7 @@ class CorePython {
   /// Can be called from any thread at any time. If called before Python
   /// logging is available, logs locally using Logging::EmitPlatformLog()
   /// (with an added warning).
-  void LoggingCall(LogName logname, LogLevel loglevel, const std::string& msg);
+  void LoggingCall(LogName logname, LogLevel loglevel, const char* msg);
   void ImportPythonObjs();
   void VerifyPythonEnvironment();
   void SoftImportBase();
@@ -95,6 +102,9 @@ class CorePython {
       -> std::vector<char*>;
 
   const auto& objs() { return objs_; }
+
+  void WarmStart1();
+  auto WarmStart1Completed() -> bool;
 
  private:
   PythonObjectSet<ObjID> objs_;

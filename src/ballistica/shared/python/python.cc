@@ -80,6 +80,7 @@ void Python::SetPythonException(const Exception& exc) {
     pytype = PyExc_RuntimeError;
   }
   assert(pytype != nullptr && PyType_Check(pytype));
+
   PyErr_SetString(pytype, description);
 }
 
@@ -114,6 +115,17 @@ auto Python::IsString(PyObject* o) -> bool {
   }
 
   return PyUnicode_Check(o);
+}
+
+auto Python::IsSequence(PyObject* o) -> bool {
+  assert(HaveGIL());
+
+  // We now gracefully handle null values.
+  if (o == nullptr) {
+    return false;
+  }
+
+  return PySequence_Check(o);
 }
 
 auto Python::GetString(PyObject* o) -> std::string {
@@ -335,7 +347,7 @@ auto Python::GetPoint2D(PyObject* o) -> Point2D {
 auto Python::StringList(const std::list<std::string>& values) -> PythonRef {
   assert(HaveGIL());
   auto size{static_cast<Py_ssize_t>(values.size())};
-  PythonRef pylist{PyList_New(size), PythonRef::kSteal};
+  auto pylist{PythonRef::Stolen(PyList_New(size))};
   int i{};
   for (auto&& value : values) {
     PyObject* item{PyUnicode_FromString(value.c_str())};
@@ -351,7 +363,7 @@ auto Python::SingleMemberTuple(const PythonRef& member) -> PythonRef {
   return {Py_BuildValue("(O)", member.NewRef()), PythonRef::kSteal};
 }
 
-auto Python::GetPythonFileLocation(bool pretty) -> std::string {
+auto Python::PythonFileLocation(bool pretty) -> std::string {
   assert(HaveGIL());
   if (PyFrameObject* f = PyEval_GetFrame()) {
     const char* path;
@@ -393,18 +405,18 @@ auto Python::GetPythonFileLocation(bool pretty) -> std::string {
   return "<unknown>";
 }
 
-auto Python::GetContextBaseString() -> std::string {
+auto Python::ContextBaseString() -> std::string {
   // Allow this to survive before core is bootstrapped.
   if (!g_base_soft) {
     return "  context_ref: <base not yet bootstrapped>";
   }
-  return g_base_soft->DoGetContextBaseString();
+  return g_base_soft->DoContextBaseString();
 }
 
 void Python::PrintContextNotYetBootstrapped() {
   // No logic-thread-check here; can be called early or from other threads.
   std::string s = std::string("  root call: <not yet bootstrapped>\n");
-  s += Python::GetContextBaseString();
+  s += Python::ContextBaseString();
   PySys_WriteStderr("%s\n", s.c_str());
 }
 

@@ -39,8 +39,6 @@ class AudioServer {
   void PushComponentUnloadCall(
       const std::vector<Object::Ref<Asset>*>& components);
 
-  void ClearSoundRefDeleteList();
-
   auto paused() const -> bool { return suspended_; }
 
   void Shutdown();
@@ -57,8 +55,8 @@ class AudioServer {
   void PushSourceStopCall(uint32_t play_id);
   void PushSourceEndCall(uint32_t play_id);
 
-  // Fade a playing sound out over the given time.  If it is already
-  // fading or does not exist, does nothing.
+  // Fade a playing sound out over the given time. If it is already fading
+  // or does not exist, does nothing.
   void FadeSoundOut(uint32_t play_id, uint32_t time);
 
   // Stop a sound from playing if it exists.
@@ -66,7 +64,10 @@ class AudioServer {
 
   auto event_loop() const -> EventLoop* { return event_loop_; }
 
+  auto using_null_device() const -> bool { return using_null_device_; }
+
   void OnDeviceDisconnected();
+  void OnDefaultDeviceChanged();
   void OpenALSoftLogCallback(const std::string& msg);
 
  private:
@@ -86,6 +87,8 @@ class AudioServer {
   void SetMusicVolume_(float volume);
   void SetSoundVolume_(float volume);
   void SetSoundPitch_(float pitch);
+  float GetPerceivedVolume_(float volume_linear);
+  void ClearSoundRefDeleteList_();
 
   void CompleteShutdown_();
 
@@ -95,6 +98,7 @@ class AudioServer {
   void Reset_();
   void Process_();
   void ProcessDeviceDisconnects_(seconds_t real_time_seconds);
+  void ProcessDefaultDeviceChange_();
 
   void UpdateTimerInterval_();
   void UpdateAvailableSources_();
@@ -117,9 +121,11 @@ class AudioServer {
   bool have_pending_loads_{};
   bool app_active_{true};
   bool suspended_{};
+  bool should_reopen_{};
   bool shutdown_completed_{};
   bool shutting_down_{};
   bool shipped_reconnect_logs_{};
+  bool using_null_device_{};
   int al_source_count_{};
   seconds_t last_connected_time_{};
   seconds_t last_reset_attempt_time_{-999.0};
@@ -136,9 +142,10 @@ class AudioServer {
   millisecs_t last_stream_process_time_{};
   millisecs_t last_sanity_check_time_{};
 
-  // Holds refs to all sources.
-  // Use sources, not this, for faster iterating.
+  /// Holds refs to all sources. Use sources, not this, for faster
+  /// iterating.
   std::vector<Object::Ref<ThreadSource_>> sound_source_refs_;
+
   struct SoundFadeNode_;
 
   // NOTE: would use unordered_map here but gcc doesn't seem to allow

@@ -39,7 +39,7 @@ class BasePython {
     kGetResourceCall,
     kTranslateCall,
     kLStrClass,
-    kCallClass,
+    kCallPartialClass,
     kAppGCCollectCall,
     kConfig,
     kAppOnNativeBootstrappingCompleteCall,
@@ -125,6 +125,9 @@ class BasePython {
     kAppPlatform,
     kAppVariantType,
     kAppVariant,
+    kV2AuthRequestCall,
+    kV2AuthDataCall,
+    kStartNativeReplCall,
     kLast  // Sentinel; must be at end.
   };
 
@@ -134,6 +137,8 @@ class BasePython {
   void SetConfig(PyObject* config);
 
   const auto& objs() { return objs_; }
+
+  void ReloadHooks();
 
   static void EnsureContextAllowsDefaultTimerTypes();
 

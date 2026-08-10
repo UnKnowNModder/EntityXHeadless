@@ -26,6 +26,7 @@
 #include "ballistica/scene_v1/python/class/python_class_activity_data.h"
 #include "ballistica/scene_v1/python/class/python_class_session_data.h"
 #include "ballistica/scene_v1/python/scene_v1_python.h"
+#include "ballistica/scene_v1/scene_v1.h"
 #include "ballistica/scene_v1/support/client_session_replay.h"
 #include "ballistica/scene_v1/support/host_activity.h"
 #include "ballistica/scene_v1/support/host_session.h"
@@ -333,7 +334,7 @@ static PyMethodDef PyNewHostSessionDef = {
     "new_host_session(sessiontype: type[bascenev1.Session],\n"
     "  benchmark_type: str | None = None) -> None\n"
     "\n"
-    "(internal)",
+    ":meta private:",
 };
 
 // -------------------------- new_replay_session -------------------------------
@@ -363,7 +364,7 @@ static PyMethodDef PyNewReplaySessionDef = {
 
     "new_replay_session(file_name: str) -> None\n"
     "\n"
-    "(internal)",
+    ":meta private:",
 };
 
 // ------------------------------ is_in_replay ---------------------------------
@@ -394,7 +395,7 @@ static PyMethodDef PyIsInReplayDef = {
 
     "is_in_replay() -> bool\n"
     "\n"
-    "(internal)",
+    ":meta private:",
 };
 
 // -------------------------- register_session-------- -------------------------
@@ -429,7 +430,7 @@ static PyMethodDef PyRegisterSessionDef = {
     "register_session(session: bascenev1.Session)"
     " -> bascenev1.SessionData\n"
     "\n"
-    "(internal)",
+    ":meta private:",
 };
 
 // --------------------------- register_activity -------------------------------
@@ -463,7 +464,7 @@ static PyMethodDef PyRegisterActivityDef = {
     "register_activity(activity: bascenev1.Activity)"
     " -> bascenev1.ActivityData\n"
     "\n"
-    "(internal)",
+    ":meta private:",
 };
 
 // ---------------------- get_foreground_host_session --------------------------
@@ -498,7 +499,7 @@ static PyMethodDef PyGetForegroundHostSessionDef = {
 
     "get_foreground_host_session() -> bascenev1.Session | None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Return the bascenev1.Session currently being displayed,"
     " or None if there is\n"
@@ -754,7 +755,7 @@ static auto PyBroadcastMessage(PyObject* self, PyObject* args, PyObject* keywds)
 
     // Now display it locally.
     g_base->graphics->screenmessages->AddScreenMessage(
-        message, color, static_cast<bool>(top),
+        message, false, color, static_cast<bool>(top),
         texture ? texture->texture_data() : nullptr,
         tint_texture ? tint_texture->texture_data() : nullptr, tint_color,
         tint2_color);
@@ -1242,7 +1243,7 @@ static PyMethodDef PySetMapBoundsDef = {
     "float])\n"
     "  -> None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Set map bounds. Generally nodes that go outside of this box are "
     "killed.",
@@ -1280,7 +1281,7 @@ static PyMethodDef PyGetForegroundHostActivityDef = {
 
     "get_foreground_host_activity() -> bascenev1.Activity | None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Returns the bascenev1.Activity currently in the foreground,\n"
     "or None if there is none.\n"};
@@ -1348,7 +1349,7 @@ static auto PyGetGameRoster(PyObject* self, PyObject* args, PyObject* keywds)
       // Let's also include a public account-id if we have one.
       std::string account_id;
       if (clientid == -1) {
-        account_id = g_base->Plus()->GetPublicV1AccountID();
+        account_id = g_base->Plus()->GetAccountID();
       } else {
         if (auto* appmode = classic::ClassicAppMode::GetActiveOrWarn()) {
           auto client2 =
@@ -1389,7 +1390,7 @@ static PyMethodDef PyGetGameRosterDef = {
 
     "get_game_roster() -> list[dict[str, Any]]\n"
     "\n"
-    "(internal)",
+    ":meta private:",
 };
 
 // ----------------------- set_debug_speed_exponent ----------------------------
@@ -1425,7 +1426,7 @@ static PyMethodDef PySetDebugSpeedExponentDef = {
 
     "set_debug_speed_exponent(speed: int) -> None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Sets the debug speed scale for the game. Actual speed is "
     "pow(2,speed).",
@@ -1448,7 +1449,7 @@ static PyMethodDef PyGetReplaySpeedExponentDef = {
 
     "get_replay_speed_exponent() -> int\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Returns current replay speed value. Actual displayed speed is "
     "pow(2,speed).",
@@ -1476,7 +1477,7 @@ static PyMethodDef PySetReplaySpeedExponentDef = {
 
     "set_replay_speed_exponent(speed: int) -> None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Set replay speed. Actual displayed speed is pow(2, speed).",
 };
@@ -1501,7 +1502,7 @@ static PyMethodDef PyIsReplayPausedDef = {
 
     "is_replay_paused() -> bool\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Returns if Replay is paused or not.",
 };
@@ -1522,7 +1523,7 @@ static PyMethodDef PyPauseReplayDef = {
 
     "pause_replay() -> None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Pauses replay.",
 };
@@ -1544,7 +1545,7 @@ static PyMethodDef PyResumeReplayDef = {
 
     "resume_replay() -> None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Resumes replay.",
 };
@@ -1577,7 +1578,7 @@ static PyMethodDef PySeekReplayDef = {
 
     "seek_replay(delta: float) -> None\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Rewind or fast-forward replay.",
 };
@@ -1599,7 +1600,7 @@ static PyMethodDef PyResetRandomPlayerNamesDef = {
 
     "reset_random_player_names() -> None\n"
     "\n"
-    "(internal)",
+    ":meta private:",
 };
 
 // --------------------------- get_random_names --------------------------------
@@ -1625,7 +1626,7 @@ static PyMethodDef PyGetRandomNamesDef = {
 
     "get_random_names() -> list\n"
     "\n"
-    "(internal)\n"
+    ":meta private:\n"
     "\n"
     "Returns the random names used by the game.",
 };
@@ -1708,7 +1709,7 @@ static PyMethodDef PySetInternalMusicDef = {
     "set_internal_music(music: babase.SimpleSound | None,\n"
     "   volume: float = 1.0, loop: bool  = True) -> None\n"
     "\n"
-    "(internal).",
+    ":meta private:.",
 };
 
 // ---------------------------- protocol_version -------------------------------
@@ -1728,7 +1729,30 @@ static PyMethodDef PyProtocolVersionDef = {
 
     "protocol_version() -> int\n"
     "\n"
-    "(internal)\n",
+    ":meta private:\n",
+};
+
+// ----------------------------- reload_hooks ---------------------------------
+
+static auto PyReloadHooks(PyObject* self) -> PyObject* {
+  BA_PYTHON_TRY;
+
+  g_scene_v1->python->ReloadHooks();
+
+  Py_RETURN_NONE;
+  BA_PYTHON_CATCH;
+}
+
+static PyMethodDef PyReloadHooksDef = {
+    "reload_hooks",              // name
+    (PyCFunction)PyReloadHooks,  // method
+    METH_NOARGS,                 // flags
+
+    "reload_hooks() -> None\n"
+    "\n"
+    "Reload functions and other objects held by the native layer.\n"
+    "Call this if you replace things in a hooks module to get the\n"
+    "native layer to see your changes.",
 };
 
 // -----------------------------------------------------------------------------
@@ -1771,6 +1795,7 @@ auto PythonMethodsScene::GetMethods() -> std::vector<PyMethodDef> {
       PyBaseTimerDef,
       PyLsInputDevicesDef,
       PyProtocolVersionDef,
+      PyReloadHooksDef,
   };
 }
 

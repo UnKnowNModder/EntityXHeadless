@@ -29,7 +29,7 @@
 #include "ballistica/base/python/support/python_context_call.h"
 #include "ballistica/base/support/app_config.h"
 #include "ballistica/base/ui/ui.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/shared/ballistica.h"
 #include "ballistica/shared/foundation/event_loop.h"
 
@@ -185,7 +185,8 @@ void Graphics::AddCleanFrameCommand(const Object::Ref<PythonContextCall>& c) {
 void Graphics::RunCleanFrameCommands() {
   assert(g_base->InLogicThread());
   for (auto&& i : clean_frame_commands_) {
-    i->Run();
+    // Can't run immediately as we're in a frame-draw.
+    i->Schedule();
   }
   clean_frame_commands_.clear();
 }
@@ -767,8 +768,6 @@ void Graphics::BuildAndPushFrameDef() {
   assert(camera_.exists());
   assert(!g_core->HeadlessMode());
 
-  // g_core->logging->Log(LogName::kBa, LogLevel::kWarning, "DRAWING");
-
   // Keep track of when we're in here; can be useful for making sure stuff
   // doesn't muck with our lists/etc. while we're using them.
   assert(!building_frame_def_);
@@ -1030,7 +1029,7 @@ void Graphics::DrawFades(FrameDef* frame_def) {
     millisecs_t cancel_time = frame_time - fade_cancel_start_;
 
     // Reset if a substantial amount of real time passes between frame draws.
-    auto real_ms = core::CorePlatform::TimeMonotonicMillisecs();
+    auto real_ms = core::Platform::TimeMonotonicMillisecs();
     if (real_ms - fade_cancel_last_real_ms_ > 1000) {
       fade_cancel_start_ = frame_time;
     }
@@ -1062,7 +1061,7 @@ void Graphics::DrawFades(FrameDef* frame_def) {
       fade_start_ = frame_time;
       // Calc when we should start counting for force-ending.
       fade_cancel_start_ = fade_start_ + fade_time_;
-      fade_cancel_last_real_ms_ = core::CorePlatform::TimeMonotonicMillisecs();
+      fade_cancel_last_real_ms_ = core::Platform::TimeMonotonicMillisecs();
     }
     bool was_done = fade_ <= 0;
     if (frame_time <= fade_start_) {
@@ -1100,10 +1099,12 @@ void Graphics::DrawFades(FrameDef* frame_def) {
 
     // If we're doing a progress-bar fade, throw in the fading progress bar.
     if (frame_time - progress_bar_end_time_ < kProgressBarFadeTime * 0.5) {
-      float o = std::min(
-          1.0f, (1.0f
-                 - static_cast<float>(frame_time - progress_bar_end_time_)
-                       / (static_cast<float>(kProgressBarFadeTime) * 0.5f)));
+      //      float o = std::min(
+      //          1.0f, (1.0f
+      //                 - static_cast<float>(frame_time -
+      //                 progress_bar_end_time_)
+      //                       / (static_cast<float>(kProgressBarFadeTime) *
+      //                       0.5f)));
       UpdateProgressBarProgress(1.0f);
       DrawProgressBar(overlay_pass, 1.0);
     }
@@ -1141,10 +1142,19 @@ void Graphics::DrawCursor(FrameDef* frame_def) {
       new_cursor_visibility = true;
     }
 
+    // As of macOS 15.6.1 there seems to be a bug where moving the cursor down
+    // from the top portion of a fullscreen window flips it back to the arrow
+    // cursor. Should submit a bug to Apple if this is still the case in macOS
+    // 16, but for now am just forcing cursor resets at a higher frequency there
+    // to hide that.
+    seconds_t fudge_secs =
+        (g_buildconfig.platform_macos() && g_buildconfig.xcode_build()) ? 0.235
+                                                                        : 2.345;
+
     // Ship this state when it changes and also every now and then just in
     // case things go wonky.
     if (new_cursor_visibility != hardware_cursor_visible_
-        || app_time - last_cursor_visibility_event_time_ > 2.137) {
+        || app_time - last_cursor_visibility_event_time_ > fudge_secs) {
       hardware_cursor_visible_ = new_cursor_visibility;
       last_cursor_visibility_event_time_ = app_time;
       g_base->app_adapter->PushMainThreadCall([this] {

@@ -1,7 +1,7 @@
 // Released under the MIT License. See LICENSE for details.
 
 #include "ballistica/classic/support/v1_account.h"
-#include <fstream>
+
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -10,7 +10,7 @@
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/support/plus_soft.h"
 #include "ballistica/core/core.h"
-#include "ballistica/core/platform/core_platform.h"
+#include "ballistica/core/platform/platform.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/generic/utils.h"
 
@@ -153,30 +153,10 @@ void V1Account::PushSetV1LoginCall(V1AccountType account_type,
                                    V1LoginState account_state,
                                    const std::string& account_name,
                                    const std::string& account_id) {
-  std::string server_name;
-  const std::string filename = "devicename.txt";
-
-  {
-    std::ifstream infile(filename);
-    if (!infile.good()) {
-      // File does not exist, create it with a default name
-      std::ofstream outfile(filename);
-      outfile << "EntityX";
-      outfile.close();
-      server_name = "EntityX";
-    } else {
-      // File exists, read the name
-      std::getline(infile, server_name);
-      infile.close();
-      if (server_name.empty()) {
-        server_name = "EntityX";
-      }
-    }
-  }
   g_base->logic->event_loop()->PushCall(
-      [account_type, account_state, server_name, account_id] {
+      [account_type, account_state, account_name, account_id] {
         g_classic->v1_account->SetLogin(account_type, account_state,
-                                        server_name, account_id);
+                                        account_name, account_id);
       });
 }
 

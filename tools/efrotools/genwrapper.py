@@ -1,6 +1,7 @@
 # Released under the MIT License. See LICENSE for details.
 #
 """Functionality related to android builds."""
+
 from __future__ import annotations
 
 import os
@@ -14,6 +15,8 @@ if TYPE_CHECKING:
     pass
 
 if __name__ == '__main__':
+
+    # pylint: disable=invalid-name
 
     from efrotools.project import (
         getprojectconfig,

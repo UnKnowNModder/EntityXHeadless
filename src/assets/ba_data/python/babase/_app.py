@@ -2,17 +2,19 @@
 #
 # pylint: disable=too-many-lines
 """Functionality related to the high level state of the app."""
+
 from __future__ import annotations
 
 import os
 import time
-import logging
+import asyncio
 from enum import Enum
 from functools import partial
 from typing import TYPE_CHECKING, override
 from threading import RLock
 
 from efro.threadpool import ThreadPoolExecutorEx
+from efro.util import strip_exception_tracebacks
 
 import _babase
 from babase._discord import DiscordSubsystem
@@ -27,12 +29,12 @@ from babase._appmodeselector import AppModeSelector
 from babase._appintent import AppIntentDefault, AppIntentExec
 from babase._stringedit import StringEditSubsystem
 from babase._devconsole import DevConsoleSubsystem
+from babase._analytics import AnalyticsSubsystem
 from babase._appconfig import AppConfig
-from babase._logging import lifecyclelog, applog
+from babase._logging import lifecyclelog, balog, applog
 from babase._gc import GarbageCollectionSubsystem
 
 if TYPE_CHECKING:
-    import asyncio
     from typing import Any, Callable, Coroutine, Generator, Awaitable
     from concurrent.futures import Future
 
@@ -151,6 +153,9 @@ class App:
         #: Subsystem for wrangling the dev-console UI.
         self.devconsole: DevConsoleSubsystem = DevConsoleSubsystem()
 
+        #: Subsystem for wrangling analytics.
+        self.analytics: AnalyticsSubsystem = AnalyticsSubsystem()
+
         #: Incremented each time the app leaves the
         #: :attr:`~babase.AppState.SUSPENDED` state. This can be a simple
         #: way to determine if network data should be refreshed/etc.
@@ -201,10 +206,16 @@ class App:
         return _babase.app_is_active()
 
     @property
-    def mode(self) -> AppMode | None:
-        """The app's current mode."""
+    def mode(self) -> AppMode:
+        """The app's current mode.
+
+        Raises :class:`ValueError` if no mode is set.
+        """
         assert _babase.in_logic_thread()
-        return self._mode
+        mode = self._mode
+        if mode is None:
+            raise ValueError('No app-mode set.')
+        return mode
 
     @property
     def asyncio_loop(self) -> asyncio.AbstractEventLoop:
@@ -230,7 +241,6 @@ class App:
         loop. Hopefully this situation will be improved in the future
         with a unified event loop.
         """
-        assert _babase.in_logic_thread()
         assert self._asyncio_loop is not None
         return self._asyncio_loop
 
@@ -274,16 +284,22 @@ class App:
     def mode_selector(self, selector: babase.AppModeSelector) -> None:
         self._mode_selector = selector
 
-    def _on_task_done(self, task: asyncio.Task) -> None:
+    def _on_task_done(self, task: Any) -> None:
         # Report any errors that occurred.
+        assert isinstance(task, asyncio.Task)
         try:
             exc = task.exception()
             if exc is not None:
-                logging.error(
+                balog.error(
                     "Error in async task '%s'.", task.get_name(), exc_info=exc
                 )
+                # We're done with the exception, so let's rip out its
+                # tracebacks to try and avoid the need for cyclic
+                # garbage collection.
+                strip_exception_tracebacks(exc)
+
         except Exception:
-            logging.exception('Error reporting async task error.')
+            balog.exception('Error reporting async task error.')
 
         self._asyncio_tasks.remove(task)
 
@@ -354,7 +370,7 @@ class App:
         except ImportError:
             return None
         except Exception:
-            logging.exception('Error importing baclassic.')
+            balog.exception('Error importing baclassic.')
             return None
 
     @property
@@ -374,7 +390,7 @@ class App:
         except ImportError:
             return None
         except Exception:
-            logging.exception('Error importing baplus.')
+            balog.exception('Error importing baplus.')
             return None
 
     @property
@@ -640,7 +656,7 @@ class App:
             try:
                 subsystem.on_ui_scale_change()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_ui_scale_change() for subsystem %s.', subsystem
                 )
 
@@ -657,7 +673,7 @@ class App:
             try:
                 subsystem.on_screen_size_change()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_screen_size_change() for subsystem %s.',
                     subsystem,
                 )
@@ -715,7 +731,7 @@ class App:
                 from_other_thread=True,
             )
         except Exception:
-            logging.exception('Error setting app intent to %s.', intent)
+            balog.exception('Error setting app intent to %s.', intent)
             _babase.pushcall(
                 partial(self._display_set_intent_error, intent),
                 from_other_thread=True,
@@ -739,7 +755,7 @@ class App:
                 try:
                     self._mode.on_deactivate()
                 except Exception:
-                    logging.exception(
+                    balog.exception(
                         'Error deactivating app-mode %s.', self._mode
                     )
 
@@ -750,7 +766,7 @@ class App:
                 try:
                     subsystem.reset()
                 except Exception:
-                    logging.exception(
+                    balog.exception(
                         'Error in reset() for subsystem %s.', subsystem
                     )
 
@@ -759,7 +775,7 @@ class App:
                 mode.on_activate()
             except Exception:
                 # Hmm; what should we do in this case?...
-                logging.exception('Error activating app-mode %s.', mode)
+                balog.exception('Error activating app-mode %s.', mode)
 
             # Let the world know when we first have an app-mode; certain
             # app stuff such as input processing can proceed at that
@@ -770,7 +786,7 @@ class App:
         try:
             mode.handle_intent(intent)
         except Exception:
-            logging.exception(
+            balog.exception(
                 'Error handling intent %s in app-mode %s.', intent, mode
             )
 
@@ -807,9 +823,9 @@ class App:
 
         _env.on_app_state_initing()
 
+        self.net = NetworkSubsystem()
         self._asyncio_loop = _asyncio.setup_asyncio()
         self.health = self.register_subsystem(AppHealthSubsystem())
-        self.net = NetworkSubsystem()
 
         # __FEATURESET_APP_SUBSYSTEM_CREATE_BEGIN__
         # This section generated by batools.appmodule; do not edit.
@@ -847,7 +863,7 @@ class App:
             try:
                 subsystem.on_app_loading()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_app_loading() for subsystem %s.', subsystem
                 )
 
@@ -896,7 +912,7 @@ class App:
             try:
                 subsystem.on_app_running()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_app_running() for subsystem %s.', subsystem
                 )
 
@@ -932,7 +948,7 @@ class App:
             try:
                 subsystem.apply_app_config()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in apply_app_config() for subsystem %s.',
                     subsystem,
                 )
@@ -1008,7 +1024,7 @@ class App:
             else:
                 # Only logical possibility left is NOT_STARTED, in which
                 # case we should not be getting called.
-                logging.warning(
+                balog.warning(
                     'App._update_state called while in %s state;'
                     ' should not happen.',
                     self.state.value,
@@ -1016,7 +1032,6 @@ class App:
                 )
 
     async def _shutdown(self) -> None:
-        import asyncio
 
         _babase.lock_all_input()
         try:
@@ -1029,7 +1044,7 @@ class App:
                         self._run_shutdown_task(task_coro)
                     )
         except* Exception:
-            logging.exception('Unexpected error(s) in shutdown.')
+            balog.exception('Unexpected error(s) in shutdown.')
 
         # Note: ideally we should run this directly here, but currently
         # it does some legacy stuff which blocks, so running it here
@@ -1042,13 +1057,16 @@ class App:
         self, coro: Coroutine[None, None, None]
     ) -> None:
         """Run a shutdown task; report errors and abort if taking too long."""
-        import asyncio
 
         task = asyncio.create_task(coro)
         try:
             await asyncio.wait_for(task, self.SHUTDOWN_TASK_TIMEOUT_SECONDS)
+        except TimeoutError:
+            # Log simple error message if it times out.
+            balog.error('Timed out waiting for shutdown task %s.', coro)
         except Exception:
-            logging.exception('Error in shutdown task (%s).', coro)
+            # Go with full ugly stack trace for anything unexpected.
+            balog.exception('Error in shutdown task %s.', coro)
 
     def _on_suspend(self) -> None:
         """Called when the app goes to a suspended state."""
@@ -1059,7 +1077,7 @@ class App:
             try:
                 subsystem.on_app_suspend()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_app_suspend() for subsystem %s.', subsystem
                 )
 
@@ -1073,7 +1091,7 @@ class App:
             try:
                 subsystem.on_app_unsuspend()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_app_unsuspend() for subsystem %s.', subsystem
                 )
 
@@ -1087,7 +1105,7 @@ class App:
             try:
                 subsystem.on_app_shutdown()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_app_shutdown() for subsystem %s.', subsystem
                 )
 
@@ -1106,7 +1124,7 @@ class App:
             try:
                 self._mode.on_deactivate()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error deactivating app-mode %s at app shutdown.',
                     self._mode,
                 )
@@ -1118,13 +1136,12 @@ class App:
             try:
                 subsystem.on_app_shutdown_complete()
             except Exception:
-                logging.exception(
+                balog.exception(
                     'Error in on_app_shutdown_complete() for subsystem %s.',
                     subsystem,
                 )
 
     async def _wait_for_shutdown_suppressions(self) -> None:
-        import asyncio
 
         # Spin and wait for anything blocking shutdown to complete.
         starttime = _babase.apptime()
@@ -1134,14 +1151,13 @@ class App:
         lifecyclelog.info('shutdown-suppress-wait end')
         duration = _babase.apptime() - starttime
         if duration > 1.0:
-            logging.warning(
+            balog.warning(
                 'Shutdown-suppressions lasted longer than ideal '
                 '(%.2f seconds).',
                 duration,
             )
 
     async def _fade_and_shutdown_graphics(self) -> None:
-        import asyncio
 
         # Kick off a short fade and give it time to complete.
         lifecyclelog.info('fade-and-shutdown-graphics begin')
@@ -1177,7 +1193,6 @@ class App:
         lifecyclelog.info('fade-and-shutdown-graphics end')
 
     async def _fade_and_shutdown_audio(self) -> None:
-        import asyncio
 
         # Tell the audio system to go down and give it a bit of
         # time to do so gracefully.
@@ -1187,6 +1202,40 @@ class App:
         while not _babase.audio_shutdown_is_complete():
             await asyncio.sleep(0.01)
         lifecyclelog.info('fade-and-shutdown-audio end')
+
+    def get_convenience_imports(self) -> dict[str, str | None]:
+        """Return active convenience imports.
+
+        This consists of a dict mapping module names to optional
+        aliases. These are the modules that will be auto-imported into
+        the REPL environment.
+
+        This can be set in the config as 'Convenience Imports'. If it is
+        not present there, defaults for the app are given.
+        """
+        cfg = self.config.get('Convenience Imports')
+        if cfg is not None:
+            if isinstance(cfg, dict) and all(
+                isinstance(k, str) and isinstance(v, str | None)
+                for k, v in cfg.items()
+            ):
+                return cfg
+            balog.warning(
+                'Ignoring invalid \'Convenience Imports\' app config value;'
+                ' expected a dict of str -> str | None.'
+            )
+
+        # __GET_DEFAULT_CONVENIENCE_IMPORTS_BEGIN__
+        # This section generated by batools.appmodule; do not edit.
+
+        return {
+            'bascenev1': 'bs',
+            'bascenev1lib': 'bsl',
+            'bauiv1': 'bui',
+            'bauiv1lib': 'buil',
+        }
+
+        # __GET_DEFAULT_CONVENIENCE_IMPORTS_END__
 
     def _thread_pool_thread_init(self) -> None:
         # Help keep things clear in profiling tools/etc.

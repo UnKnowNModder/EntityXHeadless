@@ -128,10 +128,19 @@ void UIV1Python::InvokeQuitWindow(QuitType quit_type) {
   objs().Get(UIV1Python::ObjID::kQuitWindowCall).Call(args);
 
   // If we have a keyboard, give it UI ownership.
-  base::KeyboardInput* keyboard = g_base->input->keyboard_input();
-  if (keyboard) {
+  if (base::KeyboardInput* keyboard = g_base->input->keyboard_input()) {
     g_base->ui->SetMainUIInputDevice(keyboard);
   }
+}
+
+void UIV1Python::ReloadHooks() {
+  // Object-sets normally complain if values within it are set more than
+  // once; disable that here to allow us to reload.
+  objs_.set_allow_overwrites(true);
+
+  ImportPythonObjs();
+
+  objs_.set_allow_overwrites(false);
 }
 
 }  // namespace ballistica::ui_v1

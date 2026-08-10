@@ -12,7 +12,7 @@ from threading import Thread
 from typing import TYPE_CHECKING, override
 
 from efro.error import CleanError
-from efro.util import strip_exception_tracebacks
+from efro.util import strip_exception_tracebacks, strict_partial
 from bauiv1lib.settings.testing import TestingWindow
 import bauiv1 as bui
 
@@ -90,6 +90,7 @@ class NetTestingWindow(bui.MainWindow):
         else:
             self._back_button = bui.buttonwidget(
                 parent=self._root_widget,
+                id=f'{self.main_window_id_prefix}|back',
                 position=(46, yoffs - 77),
                 size=(60, 60),
                 scale=0.9,
@@ -108,6 +109,7 @@ class NetTestingWindow(bui.MainWindow):
         xextra = -80 if uiscale is bui.UIScale.SMALL else 0
         self._copy_button = bui.buttonwidget(
             parent=self._root_widget,
+            id=f'{self.main_window_id_prefix}|copy',
             position=(
                 self._width * 0.5 + scroll_width * 0.5 - 210 + 80 + xextra,
                 yoffs - 79,
@@ -121,6 +123,7 @@ class NetTestingWindow(bui.MainWindow):
 
         self._settings_button = bui.buttonwidget(
             parent=self._root_widget,
+            id=f'{self.main_window_id_prefix}|settings',
             position=(
                 self._width * 0.5 + scroll_width * 0.5 - 110 + 80 + xextra,
                 yoffs - 77,
@@ -151,13 +154,18 @@ class NetTestingWindow(bui.MainWindow):
             autoselect=True,
             border_opacity=0.4,
         )
-        self._rows = bui.columnwidget(parent=self._scroll)
+        self._rows = bui.columnwidget(
+            parent=self._scroll,
+            id=f'{self.main_window_id_prefix}|content',
+        )
 
         # Now kick off the tests.
         # Pass a weak-ref to this window so we don't keep it alive
         # if we back out before it completes. Also set is as daemon
         # so it doesn't keep the app running if the user is trying to quit.
-        Thread(target=bui.Call(_run_diagnostics, weakref.ref(self))).start()
+        Thread(
+            target=bui.CallStrict(_run_diagnostics, weakref.ref(self))
+        ).start()
 
     @override
     def get_main_window_state(self) -> bui.MainWindowState:
@@ -168,6 +176,10 @@ class NetTestingWindow(bui.MainWindow):
                 transition=transition, origin_widget=origin_widget
             )
         )
+
+    @override
+    def main_window_should_preserve_selection(self) -> bool:
+        return True
 
     def print(self, text: str, color: tuple[float, float, float]) -> None:
         """Print text to our console thingie."""
@@ -196,17 +208,10 @@ class NetTestingWindow(bui.MainWindow):
     def _show_val_testing(self) -> None:
         assert bui.app.classic is not None
 
-        # no-op if we're not in control.
-        if not self.main_window_has_control():
-            return
-
-        self.main_window_replace(get_net_val_testing_window())
+        self.main_window_replace(get_net_val_testing_window)
 
 
 def _run_diagnostics(weakwin: weakref.ref[NetTestingWindow]) -> None:
-    # pylint: disable=too-many-statements
-    # pylint: disable=too-many-branches
-    # pylint: disable=too-many-locals
 
     from efro.util import utc_now
 
@@ -230,7 +235,7 @@ def _run_diagnostics(weakwin: weakref.ref[NetTestingWindow]) -> None:
         try:
             call()
             duration = time.monotonic() - starttime
-            _print(f'Succeeded in {duration:.2f}s.', color=(0, 1, 0))
+            _print(f'Succeeded in {duration:.3f}s.', color=(0, 1, 0))
             return True
         except Exception as exc:
             import traceback
@@ -270,47 +275,29 @@ def _run_diagnostics(weakwin: weakref.ref[NetTestingWindow]) -> None:
             _print('\nRunning dummy fail test...')
             _print_test_results(_dummy_fail)
 
-        # V1 ping
-        baseaddr = plus.get_master_server_address(source=0, version=1)
-        _print(f'\nContacting V1 master-server src0 ({baseaddr})...')
-        v1worked = _print_test_results(lambda: _test_fetch(baseaddr))
-
-        # V1 alternate ping (only if primary fails since this often fails).
-        if v1worked:
-            _print('\nSkipping V1 master-server src1 test since src0 worked.')
-        else:
-            baseaddr = plus.get_master_server_address(source=1, version=1)
-            _print(f'\nContacting V1 master-server src1 ({baseaddr})...')
-            _print_test_results(lambda: _test_fetch(baseaddr))
-
-        if 'none succeeded' in bui.app.net.v1_test_log:
+        # Bootstrap pings
+        bootstrap_addrs = plus.get_bootstrap_server_addresses()
+        for i, addr in enumerate(bootstrap_addrs):
             _print(
-                f'\nV1-test-log failed: {bui.app.net.v1_test_log}',
-                color=(1, 0, 0),
+                f'\nContacting bootstrap addr {i+1}'
+                f' of {len(bootstrap_addrs)} ({addr})...'
             )
-            have_error[0] = True
-        else:
-            _print(f'\nV1-test-log ok: {bui.app.net.v1_test_log}')
+            _print_test_results(strict_partial(_test_fetch, addr))
 
-        for srcid, result in sorted(bui.app.net.v1_ctest_results.items()):
-            _print(f'\nV1 src{srcid} result: {result}')
+        # V2 ping
+        # (UPDATE: Disabling since this is also a bootstrap server).
+        # baseaddr = plus.get_master_server_address()
+        # _print(f'\nContacting V2 master-server ({baseaddr})...')
+        # _print_test_results(lambda: _test_fetch(baseaddr))
 
-        curv1addr = plus.get_master_server_address(version=1)
-        _print(f'\nUsing V1 address: {curv1addr}')
+        _print('\nComparing local time to V2 server...')
+        _print_test_results(_test_v2_time)
 
         if plus.get_v1_account_state() == 'signed_in':
             _print('\nRunning V1 transaction...')
             _print_test_results(_test_v1_transaction)
         else:
             _print('\nSkipping V1 transaction (Not signed into V1).')
-
-        # V2 ping
-        baseaddr = plus.get_master_server_address(version=2)
-        _print(f'\nContacting V2 master-server ({baseaddr})...')
-        _print_test_results(lambda: _test_fetch(baseaddr))
-
-        _print('\nComparing local time to V2 server...')
-        _print_test_results(_test_v2_time)
 
         # Get V2 nearby zone
         with bui.app.net.zone_pings_lock:

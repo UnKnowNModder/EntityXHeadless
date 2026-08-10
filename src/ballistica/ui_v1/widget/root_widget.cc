@@ -21,6 +21,7 @@
 #include "ballistica/base/support/context.h"
 #include "ballistica/base/support/plus_soft.h"
 #include "ballistica/base/ui/ui.h"
+#include "ballistica/core/logging/logging_macros.h"
 #include "ballistica/shared/buildconfig/buildconfig_common.h"
 #include "ballistica/shared/generic/utils.h"
 #include "ballistica/ui_v1/python/ui_v1_python.h"
@@ -51,15 +52,20 @@ static const float kChestReadyTextColorR{0.0f};
 static const float kChestReadyTextColorG{1.0f};
 static const float kChestReadyTextColorB{0.0f};
 
+static const float kGetTokensButtonColorR{0.35f};
+static const float kGetTokensButtonColorG{0.35f};
+static const float kGetTokensButtonColorB{0.55f};
+
 constexpr std::array<const char*, 4> chest_ids{"0", "1", "2", "3"};
 
 int RootWidget::update_pause_count_;
 
 // Flip this to true when we're ready to use levels.
-static const bool kShowLevels{false};
+static const bool kShowLevels{};
 
 struct RootWidget::ChestSlot_ {
   std::string appearance;
+  std::string uiopentag;
   Button_* button{};
   Image_* lock_icon{};
   Image_* tv_icon{};
@@ -85,6 +91,7 @@ struct RootWidget::ButtonDef_ {
   std::string img;
   std::string mesh_transparent;
   std::string mesh_opaque;
+  std::string widget_id;
   VAlign_ v_align{VAlign_::kTop};
   UIV1Python::ObjID call{UIV1Python::ObjID::kEmptyCall};
   uint32_t visibility_mask{};
@@ -106,10 +113,10 @@ struct RootWidget::ButtonDef_ {
   float color_b{1.0f};
   float opacity{1.0f};
   float disable_offset_scale{1.0f};
-  float target_extra_left{0.0f};
-  float target_extra_right{0.0f};
-  float pre_buffer{0.0f};
-  float post_buffer{0.0f};
+  float target_extra_left{};
+  float target_extra_right{};
+  float pre_buffer{};
+  float post_buffer{};
 };
 
 struct RootWidget::Button_ {
@@ -127,8 +134,8 @@ struct RootWidget::Button_ {
   float height{30.0f};
   float scale{1.0f};
   float disable_offset_scale{1.0f};
-  float pre_buffer{0.0f};
-  float post_buffer{0.0f};
+  float pre_buffer{};
+  float post_buffer{};
   bool selectable{true};
   bool fully_offscreen{};
   bool enabled{};
@@ -244,7 +251,8 @@ void RootWidget::HideTrophyMeterAnnotation_() {
 }
 
 void RootWidget::AddMeter_(MeterType_ type, float h_align, float r, float g,
-                           float b, bool plus, const std::string& s) {
+                           float b, bool plus, const std::string& s,
+                           const std::string& widget_id) {
   float y_offs_small{7.0f};
 
   float width = (type == MeterType_::kTrophy) ? 80.0f : 110.0f;
@@ -289,8 +297,8 @@ void RootWidget::AddMeter_(MeterType_ type, float h_align, float r, float g,
       // Show some in get-tokens/tokens mode
       if (type == MeterType_::kTokens) {
         bd.visibility_mask |=
-            static_cast<uint32_t>(Widget::ToolbarVisibility::kGetTokens)
-            | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuTokens);
+            // static_cast<uint32_t>(Widget::ToolbarVisibility::kGetTokens)
+            static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuTokens);
       }
     }
 
@@ -347,6 +355,7 @@ void RootWidget::AddMeter_(MeterType_ type, float h_align, float r, float g,
         break;
     }
 
+    bd.widget_id = widget_id + "_bar";
     Button_* btn = AddButton_(bd);
 
     // Store the bar button in some cases.
@@ -491,9 +500,9 @@ void RootWidget::AddMeter_(MeterType_ type, float h_align, float r, float g,
     bd.y_offs_small = y_offs_small;
     bd.img = "uiAtlas2";
     bd.mesh_transparent = "currencyPlusButton";
-    bd.color_r = 0.35f;
-    bd.color_g = 0.35f;
-    bd.color_b = 0.55f;
+    bd.color_r = kGetTokensButtonColorR;
+    bd.color_g = kGetTokensButtonColorG;
+    bd.color_b = kGetTokensButtonColorB;
     bd.depth_min = 0.3f;
     switch (type) {
       case MeterType_::kTokens:
@@ -522,6 +531,7 @@ void RootWidget::AddMeter_(MeterType_ type, float h_align, float r, float g,
     bd.pre_buffer = -10.0f;
     bd.allow_in_game = false;
 
+    bd.widget_id = widget_id + "_plus";
     Button_* btn = AddButton_(bd);
     if (type == MeterType_::kTokens) {
       get_tokens_button_ = btn;
@@ -547,24 +557,24 @@ void RootWidget::Setup() {
         (static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuMinimal)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFull)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuStore)
-         | static_cast<uint32_t>(Widget::ToolbarVisibility::kGetTokens)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuTokens));
     bd.pre_buffer = -30.0f;
+    bd.widget_id = "back";
     Button_* b = back_button_ = AddButton_(bd);
     top_left_buttons_.push_back(b);
 
     {
       TextDef_ td;
       td.button = b;
-      td.x = 5.0f;
-      td.y = 3.0f;
+      td.x = 0.0f;
+      td.y = 0.0f;
       td.width = bd.width * 0.9f;
       td.text = g_base->assets->CharStr(SpecialChar::kBack);
       td.color_a = 1.0f;
-      td.scale = 2.0f;
+      td.scale = 1.8f;
       td.flatness = 0.0f;
       td.shadow = 0.5f;
-      AddText_(td);
+      back_button_text_ = AddText_(td);
     }
   }
 
@@ -588,6 +598,7 @@ void RootWidget::Setup() {
     bd.call = UIV1Python::ObjID::kEmptyCall;
     bd.visibility_mask |=
         static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuStore);
+    bd.widget_id = "top_bar_backing";
     AddButton_(bd);
   }
 
@@ -614,6 +625,7 @@ void RootWidget::Setup() {
         static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullRoot);
     bd.visibility_mask |=
         static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFull);
+    bd.widget_id = "top_bar_backing_2";
     AddButton_(bd);
   }
 
@@ -627,9 +639,9 @@ void RootWidget::Setup() {
     bd.depth_min = 0.3f;
     bd.y = -34.0f;
     bd.y_offs_small = 10.0f;
-    bd.color_r = 0.56f;
-    bd.color_g = 0.5f;
-    bd.color_b = 0.73f;
+    bd.color_r = 1.0f;
+    bd.color_g = 1.0f;
+    bd.color_b = 1.0f;
     bd.call = UIV1Python::ObjID::kRootUIAccountButtonPressCall;
     bd.pre_buffer = 10.0f;
     bd.visibility_mask =
@@ -639,6 +651,7 @@ void RootWidget::Setup() {
 
     bd.allow_in_game = false;
 
+    bd.widget_id = "account";
     Button_* b = account_button_ = AddButton_(bd);
     top_left_buttons_.push_back(b);
 
@@ -658,8 +671,10 @@ void RootWidget::Setup() {
       account_name_text_ = AddText_(td);
     }
   }
-  AddMeter_(MeterType_::kLevel, 0.0f, 1.0f, 1.0f, 1.0f, false, "");
-  AddMeter_(MeterType_::kTrophy, 0.0f, 1.0f, 1.0f, 1.0f, false, "");
+  AddMeter_(MeterType_::kLevel, 0.0f, 1.0f, 1.0f, 1.0f, false, "",
+            "level_meter");
+  AddMeter_(MeterType_::kTrophy, 0.0f, 1.0f, 1.0f, 1.0f, false, "",
+            "trophy_meter");
 
   {
     ButtonDef_ b;
@@ -685,6 +700,7 @@ void RootWidget::Setup() {
     b.pre_buffer = 5.0f;
     b.enable_sound = false;
     b.allow_in_main_menu = false;
+    b.widget_id = "menu";
     menu_button_ = AddButton_(b);
     top_right_buttons_.push_back(menu_button_);
   }
@@ -708,11 +724,11 @@ void RootWidget::Setup() {
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFull)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullNoBack)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullRoot)
-         | static_cast<uint32_t>(Widget::ToolbarVisibility::kGetTokens)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuTokens)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kNoMenuMinimal));
     b.pre_buffer = 5.0f;
     b.enable_sound = false;
+    b.widget_id = "squad";
     squad_button_ = AddButton_(b);
     top_right_buttons_.push_back(squad_button_);
 
@@ -735,8 +751,10 @@ void RootWidget::Setup() {
     }
   }
 
-  AddMeter_(MeterType_::kTokens, 1.0f, 1.0f, 1.0f, 1.0f, true, "");
-  AddMeter_(MeterType_::kTickets, 1.0f, 1.0f, 1.0f, 1.0f, false, "");
+  AddMeter_(MeterType_::kTokens, 1.0f, 1.0f, 1.0f, 1.0f, true, "",
+            "tokens_meter");
+  AddMeter_(MeterType_::kTickets, 1.0f, 1.0f, 1.0f, 1.0f, false, "",
+            "tickets_meter");
 
   // Chest slots.
   {
@@ -791,18 +809,22 @@ void RootWidget::Setup() {
 
     b.call = UIV1Python::ObjID::kRootUIChestSlot0PressCall;
     b.x = -1.5f * spacing;
+    b.widget_id = "chest0";
     chest0.button = AddButton_(b);
 
     b.call = UIV1Python::ObjID::kRootUIChestSlot1PressCall;
     b.x = -0.5f * spacing;
+    b.widget_id = "chest1";
     chest1.button = AddButton_(b);
 
     b.x = 0.5f * spacing;
     b.call = UIV1Python::ObjID::kRootUIChestSlot2PressCall;
+    b.widget_id = "chest2";
     chest2.button = AddButton_(b);
 
     b.x = 1.5f * spacing;
     b.call = UIV1Python::ObjID::kRootUIChestSlot3PressCall;
+    b.widget_id = "chest3";
     chest3.button = AddButton_(b);
 
     // Lock icons.
@@ -900,6 +922,7 @@ void RootWidget::Setup() {
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullRoot));
     b.pre_buffer = 20.0f;
     b.allow_in_game = false;
+    b.widget_id = "inbox";
     inbox_button_ = AddButton_(b);
 
     bottom_left_buttons_.push_back(inbox_button_);
@@ -976,6 +999,7 @@ void RootWidget::Setup() {
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullRoot));
     b.pre_buffer = 20.0f;
     b.allow_in_game = false;
+    b.widget_id = "achievements";
     achievements_button_ = AddButton_(b);
     bottom_left_buttons_.push_back(achievements_button_);
 
@@ -1014,6 +1038,7 @@ void RootWidget::Setup() {
         (static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFull)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullNoBack)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullRoot));
+    b.widget_id = "leaderboards";
     AddButton_(b);
   }
 
@@ -1035,6 +1060,7 @@ void RootWidget::Setup() {
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuFullRoot)
          | static_cast<uint32_t>(Widget::ToolbarVisibility::kMenuInGame));
     b.pre_buffer = 20.0f;
+    b.widget_id = "settings";
     settings_button_ = AddButton_(b);
     bottom_left_buttons_.push_back(settings_button_);
   }
@@ -1061,6 +1087,7 @@ void RootWidget::Setup() {
     // it, so suck target area in a bit.
     b.target_extra_left = -20.0f;
     b.target_extra_right = -20.0f;
+    b.widget_id = "inventory";
     inventory_button_ = AddButton_(b);
     bottom_right_buttons_.push_back(inventory_button_);
   }
@@ -1081,8 +1108,23 @@ void RootWidget::Setup() {
     b.pre_buffer = 10.0f;
     b.allow_in_game = false;
 
+    b.widget_id = "store";
     store_button_ = AddButton_(b);
     bottom_right_buttons_.push_back(store_button_);
+  }
+  // Store decoration.
+  {
+    ImageDef_ imgd;
+    imgd.x = -3.0f;
+    imgd.y = 50.0f;
+    imgd.width = 50.0f;
+    imgd.height = 50.0f;
+    imgd.img = "white";
+    // imgd.depth_min = 0.3f;
+
+    imgd.button = store_button_;
+    store_decoration_ = AddImage_(imgd);
+    store_decoration_->visible = false;
   }
 
   UpdateForFocusedWindow_(nullptr);
@@ -1229,11 +1271,11 @@ void RootWidget::StepLeagueRank_(base::RenderPass* renderpass, seconds_t dt) {
   float cscale2{0.7f * 1.0f + 0.3f * cscale};
 
   if (improving) {
-    trophy_meter_button_->widget->set_color(
-        kMeterColorR * cscale2, kMeterColorG * cscale, kMeterColorB * cscale2);
+    trophy_meter_mult_ = {cscale2, cscale, cscale2};
+    UpdateTrophyMeterButtonColor_();
   } else {
-    trophy_meter_button_->widget->set_color(
-        kMeterColorR * cscale, kMeterColorG * cscale2, kMeterColorB * cscale2);
+    trophy_meter_mult_ = {cscale, cscale2, cscale2};
+    UpdateTrophyMeterButtonColor_();
   }
 
   // If we reach/pass the target point, set the exact final value and end
@@ -1252,8 +1294,8 @@ void RootWidget::StepLeagueRank_(base::RenderPass* renderpass, seconds_t dt) {
                                               : base::SysSoundID::kPowerDown);
     league_rank_text_->widget->SetText(
         "#" + std::to_string(league_rank_vis_value_));
-    trophy_meter_button_->widget->set_color(kMeterColorR, kMeterColorG,
-                                            kMeterColorB);
+    trophy_meter_mult_ = {1.0f, 1.0f, 1.0f};
+    UpdateTrophyMeterButtonColor_();
     int diff{league_rank_anim_start_val_ - league_rank_vis_value_};
     auto diff_str{std::to_string(diff)};
     if (diff >= 0) {
@@ -1261,6 +1303,31 @@ void RootWidget::StepLeagueRank_(base::RenderPass* renderpass, seconds_t dt) {
     }
     ShowTrophyMeterAnnotation_(
         diff_str, improving ? Vector3f(0, 1, 0) : Vector3f(1, 0, 0));
+  }
+}
+
+void RootWidget::UpdateTrophyMeterButtonColor_() {
+  assert(trophy_meter_button_);
+  if (auto* btn = trophy_meter_button_) {
+    if (trophy_meter_open_) {
+      btn->widget->set_color(0.4f, 0.9f, 0.4f);
+    } else {
+      btn->widget->set_color(kMeterColorR * trophy_meter_mult_.x,
+                             kMeterColorG * trophy_meter_mult_.y,
+                             kMeterColorB * trophy_meter_mult_.z);
+    }
+  }
+}
+
+void RootWidget::UpdateTrophyIconColor_() {
+  assert(trophy_icon_);
+  if (auto* img = trophy_icon_) {
+    if (trophy_meter_open_) {
+      img->widget->set_color(0.4f, 0.9f, 0.4f);
+    } else {
+      auto color{ColorForLeagueValue_(league_type_vis_value_)};
+      img->widget->set_color(color.x, color.y, color.z);
+    }
   }
 }
 
@@ -1451,7 +1518,7 @@ auto RootWidget::AddButton_(const ButtonDef_& def) -> RootWidget::Button_* {
   b.widget->set_color(def.color_r, def.color_g, def.color_b);
   b.widget->set_opacity(def.opacity);
   b.widget->set_auto_select(true);
-  b.widget->set_text(def.label);
+  b.widget->SetText(def.label);
   b.widget->set_enabled(def.selectable);
   b.widget->set_selectable(def.selectable);
   b.widget->set_depth_range(def.depth_min, def.depth_max);
@@ -1489,6 +1556,15 @@ auto RootWidget::AddButton_(const ButtonDef_& def) -> RootWidget::Button_* {
   if (def.call != UIV1Python::ObjID::kEmptyCall) {
     b.widget->SetOnActivateCall(g_ui_v1->python->objs().Get(def.call).get());
   }
+
+  // We should always be setting ids for selectable widgets.
+  if (def.selectable) {
+    assert(!def.widget_id.empty());
+  }
+  if (!def.widget_id.empty()) {
+    b.widget->SetID(def.widget_id);
+  }
+
   AddWidget(b.widget.get());
   return &b;
 }
@@ -1551,12 +1627,33 @@ void RootWidget::UpdateForFocusedWindow_(Widget* widget) {
   // Take note whether we're currently in a main menu vs gameplay.
   in_main_menu_ = g_base->app_mode()->IsInMainMenu();
 
+  auto old_toolbar_visibility{root_widget_toolbar_visibility_};
+  auto old_toolbar_cancel_button_style{
+      root_widget_toolbar_cancel_button_style_};
+
   if (widget == nullptr) {
-    toolbar_visibility_ = ToolbarVisibility::kInGame;
+    root_widget_toolbar_visibility_ = ToolbarVisibility::kInGame;
+    root_widget_toolbar_cancel_button_style_ = ToolbarCancelButtonStyle::kBack;
   } else {
-    toolbar_visibility_ = widget->toolbar_visibility();
+    root_widget_toolbar_visibility_ = widget->toolbar_visibility();
+    root_widget_toolbar_cancel_button_style_ =
+        widget->toolbar_cancel_button_style();
   }
-  MarkForUpdate();
+
+  // If anything has changed here, mark stuff as dirty and run an immediate
+  // step which should update selectable states for widgets. We want to keep
+  // those values precisely in sync with the focused window for when it
+  // saves/restores selections/etc.
+  if (root_widget_toolbar_visibility_ != old_toolbar_visibility
+      || root_widget_toolbar_cancel_button_style_
+             != old_toolbar_cancel_button_style) {
+    child_widgets_dirty_ = true;
+    MarkForUpdate();
+
+    // Run an immediate step to update things; (avoids jumpy positions if
+    // resizing game window))
+    StepChildWidgets_(0.0);
+  }
 }
 
 void RootWidget::StepChildWidgets_(seconds_t dt) {
@@ -1571,12 +1668,233 @@ void RootWidget::StepChildWidgets_(seconds_t dt) {
     return;
   }
 
+  // Update some button colors/flatnesses based on whether particular UIs
+  // are open.
+  if (ui_open_states_dirty_) {
+    ui_open_states_dirty_ = false;
+    auto&& counts{g_ui_v1->ui_open_counts()};
+
+    // Get-tokens button
+    if (auto* btn = get_tokens_button_) {
+      if (counts.find("gettokens") != counts.end()) {
+        btn->widget->set_color(0.25f, 0.9f, 0.25f);
+        btn->widget->set_flatness(0.65f);
+      } else {
+        btn->widget->set_color(kGetTokensButtonColorR, kGetTokensButtonColorG,
+                               kGetTokensButtonColorB);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "get-tokens button missing when updating open states");
+    }
+
+    // Account settings button
+    if (auto* btn = account_button_) {
+      if (counts.find("accountsettings") != counts.end()) {
+        account_button_mult_ = {1.2f, 2.0f, 1.2f};
+      } else {
+        account_button_mult_ = {1.0f, 1.0f, 1.0f};
+      }
+      UpdateAccountButtonColor_();
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "get-tokens button missing when updating open states");
+    }
+
+    // Squad button
+    if (auto* btn = squad_button_) {
+      if (counts.find("classicparty") != counts.end()) {
+        btn->widget->set_color(0.8f, 1.3f, 0.8f);
+        btn->widget->set_flatness(0.6f);
+      } else {
+        btn->widget->set_color(1.0f, 1.0f, 1.0f);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "squad button missing when updating open states");
+    }
+
+    // Tickets meter
+    if (auto* img = tickets_meter_icon_) {
+      if (counts.find("resourcetypeinfotickets") != counts.end()) {
+        img->widget->set_color(0.4f, 0.9f, 0.4f);
+        img->widget->set_flatness(0.5f);
+      } else {
+        img->widget->set_color(1.0f, 1.0f, 1.0f);
+        img->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(
+          LogName::kBaUI, LogLevel::kError,
+          "tickets resource-info icon missing when updating open states");
+    }
+    if (auto* btn = tickets_meter_button_) {
+      if (counts.find("resourcetypeinfotickets") != counts.end()) {
+        btn->widget->set_color(0.4f, 0.9f, 0.4f);
+        btn->widget->set_flatness(0.5f);
+      } else {
+        btn->widget->set_color(kMeterColorR, kMeterColorG, kMeterColorB);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "tickets meter button missing when updating open states");
+    }
+
+    // Tokens meter
+    if (auto* img = tokens_meter_icon_) {
+      if (counts.find("resourcetypeinfotokens") != counts.end()) {
+        img->widget->set_color(0.4f, 0.9f, 0.4f);
+        img->widget->set_flatness(0.5f);
+      } else {
+        img->widget->set_color(1.0f, 1.0f, 1.0f);
+        img->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(
+          LogName::kBaUI, LogLevel::kError,
+          "tokens resource-info icon missing when updating open states");
+    }
+    if (auto* btn = tokens_meter_button_) {
+      if (counts.find("resourcetypeinfotokens") != counts.end()) {
+        btn->widget->set_color(0.4f, 0.9f, 0.4f);
+        btn->widget->set_flatness(0.5f);
+      } else {
+        btn->widget->set_color(kMeterColorR, kMeterColorG, kMeterColorB);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "tokens meter button missing when updating open states");
+    }
+
+    // Trophies meter
+    if (auto* img = trophy_icon_) {
+      if (counts.find("classicleaguerank") != counts.end()) {
+        trophy_meter_open_ = true;
+        UpdateTrophyIconColor_();
+        img->widget->set_flatness(0.5f);
+      } else {
+        trophy_meter_open_ = false;
+        UpdateTrophyIconColor_();
+        img->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(
+          LogName::kBaUI, LogLevel::kError,
+          "trophies resource-info icon missing when updating open states");
+    }
+    if (auto* btn = trophy_meter_button_) {
+      if (counts.find("classicleaguerank") != counts.end()) {
+        trophy_meter_open_ = true;
+        UpdateTrophyMeterButtonColor_();
+        btn->widget->set_flatness(0.5f);
+      } else {
+        trophy_meter_open_ = false;
+        UpdateTrophyMeterButtonColor_();
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "trophies meter button missing when updating open states");
+    }
+
+    // Inbox
+    if (auto* btn = inbox_button_) {
+      if (counts.find("classicinbox") != counts.end()) {
+        btn->widget->set_color(kBotLeftColorR * 0.3f, kBotLeftColorG * 1.3f,
+                               kBotLeftColorB * 0.3f);
+        btn->widget->set_flatness(0.8f);
+      } else {
+        btn->widget->set_color(kBotLeftColorR, kBotLeftColorG, kBotLeftColorB);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "classic inbox button missing when updating open states");
+    }
+
+    // Achievements
+    if (auto* btn = achievements_button_) {
+      if (counts.find("classicachievements") != counts.end()) {
+        btn->widget->set_color(kBotLeftColorR * 0.3f, kBotLeftColorG * 1.3f,
+                               kBotLeftColorB * 0.3f);
+        btn->widget->set_flatness(0.8f);
+      } else {
+        btn->widget->set_color(kBotLeftColorR, kBotLeftColorG, kBotLeftColorB);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(
+          LogName::kBaUI, LogLevel::kError,
+          "classic achievements button missing when updating open states");
+    }
+
+    // Settings
+    if (auto* btn = settings_button_) {
+      if (counts.find("settings") != counts.end()) {
+        btn->widget->set_color(kBotLeftColorR * 0.3f, kBotLeftColorG * 1.3f,
+                               kBotLeftColorB * 0.3f);
+        btn->widget->set_flatness(0.8f);
+      } else {
+        btn->widget->set_color(kBotLeftColorR, kBotLeftColorG, kBotLeftColorB);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "settings button missing when updating open states");
+    }
+
+    // Store
+    if (auto* btn = store_button_) {
+      if (counts.find("classicstore") != counts.end()) {
+        btn->widget->set_color(0.2f, 0.8f, 0.2f);
+        btn->widget->set_flatness(0.7f);
+      } else {
+        btn->widget->set_color(1.0f, 1.0f, 1.0f);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "classic-store button missing when updating open states");
+    }
+    // Store-decoration.
+    if (auto* img = store_decoration_) {
+      if (counts.find("classicstore") != counts.end()) {
+        img->widget->set_color(0.2f, 0.8f, 0.2f);
+        img->widget->set_flatness(0.7f);
+      } else {
+        img->widget->set_color(1.0f, 1.0f, 1.0f);
+        img->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "classic-store button missing when updating open states");
+    }
+
+    // Inventory
+    if (auto* btn = inventory_button_) {
+      if (counts.find("classicinventory") != counts.end()) {
+        btn->widget->set_color(0.2f, 0.8f, 0.2f);
+        btn->widget->set_flatness(0.7f);
+      } else {
+        btn->widget->set_color(1.0f, 1.0f, 1.0f);
+        btn->widget->set_flatness(0.0f);
+      }
+    } else {
+      BA_LOG_ONCE(LogName::kBaUI, LogLevel::kError,
+                  "classic-inventory button missing when updating open states");
+    }
+  }
+
   bool is_small{g_base->ui->uiscale() == UIScale::kSmall};
 
   // Update enabled-state for all buttons.
   for (Button_& b : buttons_) {
     bool enable_button =
-        static_cast<bool>(static_cast<uint32_t>(toolbar_visibility_)
+        static_cast<bool>(static_cast<uint32_t>(root_widget_toolbar_visibility_)
                           & static_cast<uint32_t>(b.visibility_mask));
     // When we're in the main menu, always disable the menu button and shift
     // the party button a bit to the right
@@ -1593,6 +1911,14 @@ void RootWidget::StepChildWidgets_(seconds_t dt) {
     if (&b == back_button_ && !is_small) {
       enable_button = false;
     }
+
+    // Hide get-tokens button while we're in the get-tokens window.
+    // if (&b == get_tokens_button_) {
+    //   if (g_ui_v1->get_tokens_window_open()) {
+    //     enable_button = false;
+    //   }
+    // }
+
     if (b.force_hide) {
       enable_button = false;
     }
@@ -1641,6 +1967,7 @@ void RootWidget::StepChildWidgets_(seconds_t dt) {
   }
   xpos = 0.0f;
   float bottom_left_height{};
+
   for (auto* btn : bottom_left_buttons_) {
     auto enabled = btn->enabled;
     float bwidthhalf = btn->width * 0.5;
@@ -1738,12 +2065,31 @@ void RootWidget::StepChildWidgets_(seconds_t dt) {
         y = base_scale_ * (b.y_smoothed - b.height * b.scale * 0.5f);
         break;
     }
-    b.widget->set_selectable(b.enabled && b.selectable);
-    b.widget->set_enabled(b.enabled && b.selectable);
+    bool selval{b.enabled && b.selectable};
+    b.widget->set_selectable(selval);
+    b.widget->set_enabled(selval);
     b.widget->set_translate(x, y);
     b.widget->set_width(b.width);
     b.widget->set_height(b.height);
     b.widget->set_scale(b.scale * base_scale_);
+  }
+
+  // Update back button label.
+  if (back_button_->enabled) {
+    if (root_widget_toolbar_cancel_button_style_
+        != root_widget_toolbar_cancel_button_style_vis_) {
+      if (root_widget_toolbar_cancel_button_style_
+          == ToolbarCancelButtonStyle::kBack) {
+        back_button_text_->widget->SetText(
+            g_base->assets->CharStr(SpecialChar::kBack));
+      } else if (root_widget_toolbar_cancel_button_style_
+                 == ToolbarCancelButtonStyle::kClose) {
+        back_button_text_->widget->SetText(
+            g_base->assets->CharStr(SpecialChar::kClose));
+      }
+      root_widget_toolbar_cancel_button_style_vis_ =
+          root_widget_toolbar_cancel_button_style_;
+    }
   }
 
   for (Text_& t : texts_) {
@@ -1789,7 +2135,7 @@ void RootWidget::UpdateLayout() {
   }
 
   // Update the window stack.
-  BA_DEBUG_UI_READ_LOCK;
+  BA_DEBUG_UI_READ_LOCK;  // Make sure hierarchy doesn't change under us.
   if (screen_stack_widget_ != nullptr) {
     screen_stack_widget_->set_translate(0, 0);
     screen_stack_widget_->SetWidth(width());
@@ -1807,19 +2153,46 @@ void RootWidget::UpdateLayout() {
   StepChildWidgets_(0.0);
 }
 
-void RootWidget::OnUIScaleChange() { MarkForUpdate(); }
+void RootWidget::OnUIScaleChange() {
+  child_widgets_dirty_ = true;
+  MarkForUpdate();
+}
+
+void RootWidget::OnUIOpenStateChange() {
+  assert(g_base->InLogicThread());
+
+  ui_open_states_dirty_ = true;
+  child_widgets_dirty_ = true;
+  for (auto&& chest_id : chest_ids) {
+    auto&& slot{chest_slots_[chest_id]};
+    slot.live_display_dirty = true;
+  }
+}
 
 auto RootWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
   // If a cancel message comes through and our back button is enabled, fire
   // our back button. In all other cases just do the default.
-  if (m.type == base::WidgetMessage::Type::kCancel && back_button_ != nullptr
-      && back_button_->widget->enabled()
-      && !overlay_stack_widget_->HasChildren()) {
-    back_button_->widget->Activate();
-    return true;
-  } else {
-    return ContainerWidget::HandleMessage(m);
+  if (m.type == base::WidgetMessage::Type::kCancel) {
+    // Handle cancel events specially. This lets us hit escape or a back
+    // button no matter what toolbar or window widget it selected and have
+    // it behave predictably.
+
+    // If there is something in our overlay stack, pass the cancel to it.
+    if (overlay_stack_widget_->HasChildren()) {
+      return overlay_stack_widget_->HandleMessage(m);
+    }
+
+    // Otherwise we want the cancel to go to whatever is in the main window
+    // stack. To do that we either send the event directly or we activate
+    // our global back button which does the same thing.
+    if (back_button_ != nullptr && back_button_->widget->enabled()) {
+      back_button_->widget->Activate();
+      return true;
+    }
+    // No global back button; just send the cancel directly.
+    return screen_stack_widget_->HandleMessage(m);
   }
+  return ContainerWidget::HandleMessage(m);
 }
 
 void RootWidget::SquadPress() {
@@ -1836,14 +2209,14 @@ void RootWidget::BackPress() {
 }
 
 void RootWidget::SetScreenWidget(StackWidget* w) {
-  // this needs to happen before any buttons get added.
+  // This needs to happen before any buttons get added.
   assert(buttons_.empty());
   AddWidget(w);
   screen_stack_widget_ = w;
 }
 
 void RootWidget::SetOverlayWidget(StackWidget* w) {
-  // this needs to happen after our buttons and things get added..
+  // This needs to happen after our buttons and things get added.
   assert(!buttons_.empty());
 
   AddWidget(w);
@@ -1888,6 +2261,8 @@ auto RootWidget::GetSpecialWidget(const std::string& s) const -> Widget* {
     return chest_slots_.at("2").button->widget.get();
   } else if (s == "chest_3_button") {
     return chest_slots_.at("3").button->widget.get();
+  } else if (s == "menu_button") {
+    return menu_button_ ? menu_button_->widget.get() : nullptr;
   }
   return nullptr;
 }
@@ -1896,22 +2271,33 @@ void RootWidget::SetAccountSignInState(bool signed_in,
                                        const std::string& name) {
   if (account_name_text_) {
     auto* w{account_name_text_->widget.get()};
-    auto* wb{account_button_->widget.get()};
+    [[maybe_unused]] auto* wb{account_button_->widget.get()};
     assert(w);
     assert(wb);
 
+    account_button_signed_in_ = signed_in;
     if (signed_in) {
       w->SetText(g_base->assets->CharStr(SpecialChar::kV2Logo) + name);
       w->set_color(0.0f, 0.4f, 0.1f, 1.0f);
       w->set_shadow(0.2f);
       w->set_flatness(1.0f);
-      wb->set_color(0.8f, 1.2f, 0.8f);
     } else {
       w->SetText("{\"r\":\"notSignedInText\"}");
       w->set_color(1.0f, 0.2f, 0.2f, 1.0f);
       w->set_shadow(0.5f);
       w->set_flatness(1.0f);
-      wb->set_color(0.45f, 0.4f, 0.4f);
+    }
+    UpdateAccountButtonColor_();
+  }
+}
+
+void RootWidget::UpdateAccountButtonColor_() {
+  if (auto* btn = account_button_) {
+    auto&& mult{account_button_mult_};
+    if (account_button_signed_in_) {
+      btn->widget->set_color(mult.x * 0.8f, mult.y * 1.2f, mult.z * 0.8f);
+    } else {
+      btn->widget->set_color(mult.x * 0.45f, mult.y * 0.4f, mult.z * 0.4f);
     }
   }
 }
@@ -1994,8 +2380,11 @@ void RootWidget::SetAccountState(const std::string& league_type,
           : "");
 
   SetInboxCountValue_(inbox_count_vis_value_, inbox_count_is_max_vis_value_);
-  auto color{ColorForLeagueValue_(league_type_vis_value_)};
-  trophy_icon_->widget->set_color(color.x, color.y, color.z);
+
+  UpdateTrophyIconColor_();
+  // auto color{ColorForLeagueValue_(league_type_vis_value_)};
+  // trophy_icon_->widget->set_color(color.x, color.y, color.z);
+
   UpdateInboxDisplay_();
   UpdateLeagueRankDisplay_();
 }
@@ -2088,8 +2477,9 @@ void RootWidget::UpdateLeagueRankDisplay_() {
   league_number_vis_value_ = league_number_value_;
 
   // We don't animate league color; always just apply it immediately.
-  auto color{ColorForLeagueValue_(league_type_vis_value_)};
-  trophy_icon_->widget->set_color(color.x, color.y, color.z);
+  UpdateTrophyIconColor_();
+  // auto color{ColorForLeagueValue_(league_type_vis_value_)};
+  // trophy_icon_->widget->set_color(color.x, color.y, color.z);
 
   // We may want to animate rank.
   if (league_rank_animating_) {
@@ -2155,6 +2545,29 @@ void RootWidget::SetLeagueRankValues(const std::string& league_type,
   league_number_value_ = league_number;
   league_rank_value_ = league_rank;
   UpdateLeagueRankDisplay_();
+}
+
+void RootWidget::SetStoreStyle(const std::string& val) {
+  if (store_style_ == val) {
+    return;  // Unchanged.
+  }
+
+  child_widgets_dirty_ = true;
+
+  assert(store_decoration_);
+  if (val == "s") {
+    base::Assets::AssetListLock lock;
+    store_decoration_->widget->SetTexture(
+        g_base->assets->GetTexture("storeCharacterXmas").get());
+    store_decoration_->visible = true;
+  } else {
+    // Normal style.
+    if (val != "n" && val != "") {
+      BA_LOG_ONCE(LogName::kBa, LogLevel::kError,
+                  "Unsupported root-widget store-style: '" + val + "'");
+    }
+    store_decoration_->visible = false;
+  }
 }
 
 void RootWidget::SetInboxState(int val, bool is_max,
@@ -2254,8 +2667,12 @@ void RootWidget::SetHaveLiveValues(bool have_live_values) {
   assert(store_button_);
   store_button_->widget->set_opacity(oval2);
 
-  assert(inventory_button_);
-  inventory_button_->widget->set_opacity(oval2);
+  assert(store_decoration_);
+  store_decoration_->widget->set_opacity(oval2);
+
+  // UPDATE - inventory is always available in classic.
+  // assert(inventory_button_);
+  // inventory_button_->widget->set_opacity(oval2);
 
   assert(get_tokens_button_);
   get_tokens_button_->widget->set_opacity(oval2);
@@ -2299,6 +2716,7 @@ void RootWidget::SetChests(
     seconds_t chest_3_ad_allow_time) {
   auto& chest0{chest_slots_["0"]};
   chest0.appearance = chest_0_appearance;
+  chest0.uiopentag = "classicchest0";
   chest0.create_time = chest_0_create_time;
   chest0.unlock_time = chest_0_unlock_time;
   chest0.unlock_tokens = chest_0_unlock_tokens;
@@ -2310,6 +2728,7 @@ void RootWidget::SetChests(
 
   auto& chest1{chest_slots_["1"]};
   chest1.appearance = chest_1_appearance;
+  chest1.uiopentag = "classicchest1";
   chest1.create_time = chest_1_create_time;
   chest1.unlock_time = chest_1_unlock_time;
   chest1.unlock_tokens = chest_1_unlock_tokens;
@@ -2321,6 +2740,7 @@ void RootWidget::SetChests(
 
   auto& chest2{chest_slots_["2"]};
   chest2.appearance = chest_2_appearance;
+  chest2.uiopentag = "classicchest2";
   chest2.create_time = chest_2_create_time;
   chest2.unlock_time = chest_2_unlock_time;
   chest2.unlock_tokens = chest_2_unlock_tokens;
@@ -2332,6 +2752,7 @@ void RootWidget::SetChests(
 
   auto& chest3{chest_slots_["3"]};
   chest3.appearance = chest_3_appearance;
+  chest3.uiopentag = "classicchest3";
   chest3.create_time = chest_3_create_time;
   chest3.unlock_time = chest_3_unlock_time;
   chest3.unlock_tokens = chest_3_unlock_tokens;
@@ -2376,7 +2797,7 @@ void RootWidget::UpdateChests_() {
 
   auto now{g_base->TimeSinceEpochCloudSeconds()};
 
-  // auto current_seconds_since_epoch{g_base->TimeSinceEpochCloudSeconds()};
+  auto&& counts{g_ui_v1->ui_open_counts()};
 
   for (auto&& chest_id : chest_ids) {
     auto&& slot{chest_slots_[chest_id]};
@@ -2409,12 +2830,13 @@ void RootWidget::UpdateChests_() {
       slot.live_display_dirty = false;
     }
 
+    auto uiopen{counts.find(slot.uiopentag) != counts.end()};
+
     assert(slot.button);
     assert(slot.lock_icon);
     Object::Ref<base::TextureAsset> tex;
     if (slot.appearance == "") {
       // Empty slot.
-      slot.button->widget->set_color(0.473f, 0.44f, 0.583f);
       slot.button->width = slot.button->height = 80.0f;
       slot.button->y = have_chests ? 44.0f : -2.0f;
       {
@@ -2430,6 +2852,15 @@ void RootWidget::UpdateChests_() {
       slot.button->widget->set_tint2_color(1.0f, 1.0f, 1.0f);
 
       slot.needs_faster_refresh = false;
+
+      // Show in flat green if ui is open.
+      if (uiopen) {
+        slot.button->widget->set_color(0.1f, 0.7f, 0.1f);
+        slot.button->widget->set_flatness(0.7f);
+      } else {
+        slot.button->widget->set_color(0.473f, 0.44f, 0.583f);
+        slot.button->widget->set_flatness(0.0f);
+      }
 
     } else {
       Object::Ref<base::TextureAsset> textint;
@@ -2459,13 +2890,22 @@ void RootWidget::UpdateChests_() {
         tex = g_base->assets->GetTexture(chest_tex_closed);
         textint = g_base->assets->GetTexture(chest_tex_closed_tint);
       }
-      slot.button->widget->set_color(chest_color.x, chest_color.y,
-                                     chest_color.z);
-      slot.button->widget->SetTintTexture(textint.get());
-      slot.button->widget->set_tint_color(chest_tint.x, chest_tint.y,
-                                          chest_tint.z);
-      slot.button->widget->set_tint2_color(chest_tint2.x, chest_tint2.y,
-                                           chest_tint2.z);
+
+      // Show in flat green if ui is open.
+      if (uiopen) {
+        slot.button->widget->set_color(0.2f, 0.8f, 0.2f);
+        slot.button->widget->set_flatness(0.7f);
+        slot.button->widget->SetTintTexture(nullptr);
+      } else {
+        slot.button->widget->set_flatness(0.0f);
+        slot.button->widget->set_color(chest_color.x, chest_color.y,
+                                       chest_color.z);
+        slot.button->widget->SetTintTexture(textint.get());
+        slot.button->widget->set_tint_color(chest_tint.x, chest_tint.y,
+                                            chest_tint.z);
+        slot.button->widget->set_tint2_color(chest_tint2.x, chest_tint2.y,
+                                             chest_tint2.z);
+      }
 
       auto seconds_to_unlock{
           gold_pass_ ? 0
@@ -2486,8 +2926,19 @@ void RootWidget::UpdateChests_() {
                       && g_base->Plus()->HaveIncentivizedAd()};
 
         slot.lock_icon->visible = true;
-        // slot.text->visible = true;
         slot.tv_icon->visible = allow_ad;
+
+        if (uiopen) {
+          slot.lock_icon->widget->set_color(0.2f, 0.8f, 0.2f);
+          slot.lock_icon->widget->set_flatness(0.7f);
+          slot.tv_icon->widget->set_color(0.2f, 0.8f, 0.2f);
+          slot.tv_icon->widget->set_flatness(0.7f);
+        } else {
+          slot.lock_icon->widget->set_color(1.0f, 1.0f, 1.0f);
+          slot.lock_icon->widget->set_flatness(0.0f);
+          slot.tv_icon->widget->set_color(1.0f, 1.0f, 1.0f);
+          slot.tv_icon->widget->set_flatness(0.0f);
+        }
 
         // Special case - flash 'open me' if we have enough tokens to
         // unlock.
