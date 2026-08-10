@@ -6,7 +6,6 @@
 #include <utility>
 #include <vector>
 
-#include <arpa/inet.h>
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/networking/network_writer.h"
 #include "ballistica/classic/support/classic_app_mode.h"
@@ -93,18 +92,10 @@ auto ConnectionToClientUDP::GetAsUDP() -> ConnectionToClientUDP* {
 }
 
 auto ConnectionToClientUDP::GetIPAddress() const -> std::string {
-  char ip_str[INET6_ADDRSTRLEN] = {0};
-  const auto* sa = reinterpret_cast<const sockaddr*>(&addr_.get_sockaddr());
-
-  if (sa->sa_family == AF_INET) {
-    const auto* sin = reinterpret_cast<const sockaddr_in*>(sa);
-    inet_ntop(AF_INET, &(sin->sin_addr), ip_str, sizeof(ip_str));
-  } else if (sa->sa_family == AF_INET6) {
-    const auto* sin6 = reinterpret_cast<const sockaddr_in6*>(sa);
-    inet_ntop(AF_INET6, &(sin6->sin6_addr), ip_str, sizeof(ip_str));
+  if (addr_) {
+    return addr_->GetIPString(); // Uses built-in SockAddr IP string converter
   }
-
-  return std::string(ip_str);
+  return "";
 }
 
 void ConnectionToClientUDP::RequestDisconnect() {
