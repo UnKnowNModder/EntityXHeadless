@@ -1116,6 +1116,21 @@ auto SceneV1Python::GetPySceneDataAsset(PyObject* o, bool allow_empty_ref,
       PyExcType::kType);
 }
 
+void SceneV1Python::PlayerJoinedParty(int client_id) {
+  base::ScopedSetContext ssc(nullptr);
+
+  // Pack the client_id integer into a Python tuple: (client_id,)
+  PythonRef args(Py_BuildValue("(i)", client_id), PythonRef::kSteal);
+
+  // Call the cached Python function hook
+  PythonRef result = objs().Get(ObjID::kPlayerJoinedPartyCall).Call(args);
+
+  if (!result.exists()) {
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "Error executing PlayerJoinedParty Python hook.");
+  }
+}
+
 auto SceneV1Python::FilterChatMessage(std::string* message, int client_id)
     -> bool {
   assert(message);

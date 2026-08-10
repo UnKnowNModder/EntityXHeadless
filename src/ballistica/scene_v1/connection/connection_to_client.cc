@@ -397,6 +397,10 @@ void ConnectionToClient::HandleGamePacket(const std::vector<uint8_t>& data) {
           }
         }
 
+        if (g_scene_v1) {
+          g_scene_v1->python->PlayerJoinedParty(id());
+        }
+
         // Also mark the time for flashing the 'someone just joined your
         // party' message in the corner.
         appmode->set_last_connection_to_client_join_time(
