@@ -1,6 +1,7 @@
 name: Build Ballistica Server (Release)
 
 on:
+  push:
   workflow_dispatch:
     branches:
       - master

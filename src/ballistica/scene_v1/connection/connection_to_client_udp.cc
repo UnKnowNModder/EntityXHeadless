@@ -93,7 +93,7 @@ auto ConnectionToClientUDP::GetAsUDP() -> ConnectionToClientUDP* {
 
 auto ConnectionToClientUDP::GetIPAddress() const -> std::string {
   if (addr_) {
-    return addr_->GetIPString(); // Uses built-in SockAddr IP string converter
+    return addr_->AddressString(); // Uses built-in SockAddr IP string converter
   }
   return "";
 }
