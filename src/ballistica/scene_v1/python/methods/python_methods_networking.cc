@@ -974,6 +974,7 @@ auto PythonMethodsNetworking::GetMethods() -> std::vector<PyMethodDef> {
       PyDisconnectClientDef,
       PyGetClientPublicDeviceUUIDDef,
       PyGetClientPingDef,
+      PyGetClientIPDef,
       PyGetConnectionToHostInfoDef,
       PyGetConnectionToHostInfo2Def,
       PyClientInfoQueryResponseDef,
