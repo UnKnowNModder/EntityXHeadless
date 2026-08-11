@@ -18,7 +18,7 @@ values = [
     _hooks.launch_main_menu_session,  # kLaunchMainMenuSessionCall
     _hooks.get_player_icon,  # kGetPlayerIconCall
     _hooks.filter_chat_message,  # kFilterChatMessageCall
-    _hooks.player_joined_party,  # kPlayerJoinedPartyCall
+    _hooks.on_client_joined,  # kOnClientJoinedCall
     _hooks.local_chat_message,  # kHandleLocalChatMessageCall
     _bascenev1.client_info_query_response,  # kClientInfoQueryResponseCall
     _messages.ShouldShatterMessage,  # kShouldShatterMessageClass

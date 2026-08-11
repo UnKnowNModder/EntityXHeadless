@@ -398,7 +398,7 @@ void ConnectionToClient::HandleGamePacket(const std::vector<uint8_t>& data) {
         }
 
         if (g_scene_v1) {
-          g_scene_v1->python->PlayerJoinedParty(id());
+          g_scene_v1->python->OnClientJoined(id());
         }
 
         // Also mark the time for flashing the 'someone just joined your

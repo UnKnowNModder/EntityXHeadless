@@ -1116,18 +1116,18 @@ auto SceneV1Python::GetPySceneDataAsset(PyObject* o, bool allow_empty_ref,
       PyExcType::kType);
 }
 
-void SceneV1Python::PlayerJoinedParty(int client_id) {
+void SceneV1Python::OnClientJoined(int client_id) {
   base::ScopedSetContext ssc(nullptr);
 
   // Pack the client_id integer into a Python tuple: (client_id,)
   PythonRef args(Py_BuildValue("(i)", client_id), PythonRef::kSteal);
 
   // Call the cached Python function hook
-  PythonRef result = objs().Get(ObjID::kPlayerJoinedPartyCall).Call(args);
+  PythonRef result = objs().Get(ObjID::kOnClientJoinedCall).Call(args);
 
   if (!result.exists()) {
     g_core->logging->Log(LogName::kBa, LogLevel::kError,
-                         "Error executing PlayerJoinedParty Python hook.");
+                         "Error executing OnClientJoined Python hook.");
   }
 }
 

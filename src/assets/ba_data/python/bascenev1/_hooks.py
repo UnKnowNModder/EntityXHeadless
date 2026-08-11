@@ -45,8 +45,9 @@ def filter_chat_message(msg: str, client_id: int) -> str | None:
     del client_id  # Unused by default.
     return msg
 
-def player_joined_party(client_id: int) -> None:
-    return
+def on_client_joined(client_id: int) -> None:
+    del client_id
+    
 
 def local_chat_message(msg: str) -> None:
     classic = babase.app.classic

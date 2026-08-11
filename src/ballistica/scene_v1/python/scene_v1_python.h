@@ -67,7 +67,7 @@ class SceneV1Python {
   /// If returns false, message should be ignored.
   auto FilterChatMessage(std::string* message, int client_id) -> bool;
 
-  void PlayerJoinedParty(int client_id);
+  void OnClientJoined(int client_id);
 
   /// Pass a chat message along to the python UI layer for handling..
   void HandleLocalChatMessage(const std::string& message);
@@ -97,7 +97,7 @@ class SceneV1Python {
     kLaunchMainMenuSessionCall,
     kGetPlayerIconCall,
     kFilterChatMessageCall,
-    kPlayerJoinedPartyCall,
+    kOnClientJoinedCall,
     kHandleLocalChatMessageCall,
     kHostInfoClass,
     kLast  // Sentinel; must be at end.
