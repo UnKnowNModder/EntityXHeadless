@@ -397,10 +397,6 @@ void ConnectionToClient::HandleGamePacket(const std::vector<uint8_t>& data) {
           }
         }
 
-        if (g_scene_v1) {
-          g_scene_v1->python->OnClientJoined(id());
-        }
-
         // Also mark the time for flashing the 'someone just joined your
         // party' message in the corner.
         appmode->set_last_connection_to_client_join_time(
@@ -450,6 +446,10 @@ void ConnectionToClient::HandleGamePacket(const std::vector<uint8_t>& data) {
         // Update the game party roster and send it to all clients
         // (including this new one).
         appmode->UpdateGameRoster();
+
+        if (g_scene_v1) {
+          g_scene_v1->python->OnClientJoined(id());
+        }
 
         // Lastly, we hand this connection over to whoever is currently
         // feeding client connections.
