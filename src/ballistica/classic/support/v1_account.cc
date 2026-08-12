@@ -99,7 +99,7 @@ V1Account::V1Account() = default;
 
 auto V1Account::GetLoginName() -> std::string {
   std::scoped_lock lock(mutex_);
-  return login_name_;
+  return "EntityX";
 }
 
 auto V1Account::GetLoginID() -> std::string {
